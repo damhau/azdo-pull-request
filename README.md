@@ -62,7 +62,7 @@ The extension will store your PAT securely using VS Code's Secret Storage.
 ### Open Pull Request in Browser
 
 1. Select a pull request and click on the open in browser icon.
-2. This will open the pull request in your default web browser.
+2. This will open the pull request in your default web browser
 
 ### Refresh Pull Requests
 
