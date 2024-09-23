@@ -3,7 +3,7 @@
 
 ## Overview
 
-The Azure DevOps Pull Request Review extension for Visual Studio Code enables users to manage their Azure DevOps pull requests directly from the IDE. This extension provides features for listing, approving, rejecting, commenting on, and creating new pull requests, all from within the VS Code interface.
+The Azure DevOps Pull Request Review extension for Visual Studio Code enables users to manage their Azure DevOps pull requests directly from the IDE. This extension provides features for listing, approving, rejecting, commenting on, and creating new pull requests, all from within the VS Code interface
 
 ## Features
 
