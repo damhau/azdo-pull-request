@@ -9,6 +9,7 @@
   "categories": [
     "Other"
   ],
+  "publisher": "DHC",
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
