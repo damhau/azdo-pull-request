@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
- });
+});
 
 export class PullRequestService {
     private azureDevOpsOrgUrl: string;
@@ -45,28 +45,29 @@ export class PullRequestService {
             const response = await axios.patch(
                 url,
                 { status: 'abandoned' },
-                { headers: {
-                    'User-Agent': this.userAgent,
-                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
                     }
                 }
             );
 
             vscode.window.withProgress(
                 {
-                  location: vscode.ProgressLocation.Notification,
-                  title: `Pull Request Abandoned: ${pullRequestId}`,
-                  cancellable: false,
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Pull Request Abandoned: ${pullRequestId}`,
+                    cancellable: false,
                 },
                 async (progress, token) => {
-                 for (let i = 0; i < 2; i++) {
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                  setTimeout(() => {
-                    progress.report({ increment: i*10, message: title });
-                  }, 10000);
+                    for (let i = 0; i < 2; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        setTimeout(() => {
+                            progress.report({ increment: i * 10, message: '' });
+                        }, 10000);
+                    }
                 }
-               }
-              );
+            );
 
 
         } catch (error: unknown) {
@@ -74,14 +75,14 @@ export class PullRequestService {
         }
     }
 
-    async openCreatePullRequestForm() {
+    async openCreatePullRequestForm(): Promise<boolean> {
         const repository = await vscode.window.showQuickPick(this.getRepositories(), {
             placeHolder: 'Select the repository for the pull request'
         });
 
         if (!repository) {
             vscode.window.showErrorMessage('Repository is required to create a pull request.');
-            return;
+            return false;
         }
 
         const sourceBranch = await vscode.window.showQuickPick(this.getBranches(repository), {
@@ -90,7 +91,7 @@ export class PullRequestService {
 
         if (!sourceBranch) {
             vscode.window.showErrorMessage('Source branch is required to create a pull request.');
-            return;
+            return false;
         }
 
         const targetBranch = 'main'; // Assuming main or default branch
@@ -101,7 +102,7 @@ export class PullRequestService {
 
         if (!title) {
             vscode.window.showErrorMessage('Title is required to create a pull request.');
-            return;
+            return false;
         }
 
         const description = await vscode.window.showInputBox({
@@ -109,6 +110,7 @@ export class PullRequestService {
         });
 
         await this.createPullRequest(repository, sourceBranch, targetBranch, title, description || '');
+        return true;
     }
 
     async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string) {
@@ -131,7 +133,22 @@ export class PullRequestService {
                 }
             );
 
-            vscode.window.showInformationMessage(`Pull Request Created: ${response.data.pullRequestId}`);
+
+            vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Pull Request Created: ${response.data.pullRequestId}`,
+                    cancellable: false,
+                },
+                async (progress, token) => {
+                    for (let i = 0; i < 2; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        setTimeout(() => {
+                            progress.report({ increment: i * 10, message: '' });
+                        }, 10000);
+                    }
+                }
+            );
 
 
         } catch (error: unknown) {
@@ -145,15 +162,20 @@ export class PullRequestService {
         try {
             const response = await axios.get(
                 url,
-                {  headers: {
-                    'User-Agent': this.userAgent,
-                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                } }
+                {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    }
+                }
             );
             return response.data.value.map((repo: any) => repo.name); // Return repository IDs
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
-            return [];
+            // } catch (error) {
+            //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
+            //     return [];
+            // }
+        } catch (error: unknown) {
+            return this.handleError(error);
         }
     }
 
@@ -163,15 +185,20 @@ export class PullRequestService {
         try {
             const response = await axios.get(
                 url,
-                {  headers: {
-                    'User-Agent': this.userAgent,
-                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                } }
+                {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    }
+                }
             );
             return response.data; // Return repository IDs
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
-            return [];
+            // } catch (error) {
+            //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
+            //     return [];
+            // }
+        } catch (error: unknown) {
+            return this.handleError(error);
         }
     }
 
@@ -182,15 +209,20 @@ export class PullRequestService {
         try {
             const response = await axios.get(
                 url,
-                { headers: {
-                    'User-Agent': this.userAgent,
-                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                } }
+                {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    }
+                }
             );
             return response.data.value.map((ref: any) => ref.name.replace('refs/heads/', ''));
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to fetch branches: ${error.message}`);
-            return [];
+            // } catch (error) {
+            //     vscode.window.showErrorMessage(`Failed to fetch branches: ${error.message}`);
+            //     return [];
+            // }
+        } catch (error: unknown) {
+            return this.handleError(error);
         }
     }
 
@@ -226,10 +258,12 @@ export class PullRequestService {
                 const response = await axios.put(
                     url,
                     { vote: 10 }, // Set the vote to -10 (reject)
-                    { headers: {
-                        'User-Agent': this.userAgent,
-                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                    } }
+                    {
+                        headers: {
+                            'User-Agent': this.userAgent,
+                            'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                        }
+                    }
                 );
 
                 progress.report({ message: `Done: ${pullRequestId}` });
@@ -274,10 +308,12 @@ export class PullRequestService {
                 const response = await axios.put(
                     url,
                     { vote: -10 }, // Set the vote to -10 (reject)
-                    { headers: {
-                        'User-Agent': this.userAgent,
-                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                    } }
+                    {
+                        headers: {
+                            'User-Agent': this.userAgent,
+                            'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                        }
+                    }
                 );
 
                 progress.report({ message: `Done: ${pullRequestId}` });
@@ -390,78 +426,6 @@ export class PullRequestService {
             return this.handleError(error);
         }
     }
-
-
-    // async openCommentWebview(prItem: any) {
-    //     const pullRequestId = prItem.prId;
-    //     const repoName = prItem.repoName;
-
-    //     // Create and show a new webview panel
-    //     const panel = vscode.window.createWebviewPanel(
-    //         'addComment', // Identifies the type of the webview. Used internally
-    //         `Add Comment to PR #${pullRequestId}`, // Title of the panel displayed to the user
-    //         vscode.ViewColumn.One, // Editor column to show the new webview panel in
-    //         {
-    //             enableScripts: true // Enable javascript in the webview
-    //         }
-    //     );
-
-    //     // Set the HTML content of the webview panel
-    //     panel.webview.html = this.getWebviewContent();
-
-    //     // Handle messages from the webview
-    //     panel.webview.onDidReceiveMessage(
-    //         async message => {
-    //             if (message.command === 'submit') {
-    //                 const comment = message.text;
-    //                 if (comment) {
-    //                     await this.addCommentToPullRequest2(prItem, comment);
-    //                     panel.dispose(); // Close the panel after adding the comment
-    //                 } else {
-    //                     vscode.window.showErrorMessage('Comment cannot be empty.');
-    //                 }
-    //             }
-    //         },
-    //         undefined,
-    //         []
-    //     );
-    // }
-
-    // // Method to return the HTML content for the webview
-    // getWebviewContent(): string {
-    //     return `
-    //     <!DOCTYPE html>
-    //     <html lang="en">
-    //     <head>
-    //         <meta charset="UTF-8">
-    //         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    //         <title>Add Comment</title>
-    //         <style>
-    //             body { font-family: Arial, sans-serif; }
-    //             textarea { width: 100%; height: 150px; }
-    //             button { margin-top: 10px; padding: 5px 10px; }
-    //         </style>
-    //     </head>
-    //     <body>
-    //         <h2>Add Comment</h2>
-    //         <form id="commentForm">
-    //             <textarea id="comment" placeholder="Enter your comment here..."></textarea>
-    //             <br>
-    //             <button type="button" onclick="submitComment()">Submit</button>
-    //         </form>
-    //         <script>
-    //             const vscode = acquireVsCodeApi();
-    //             function submitComment() {
-    //                 const comment = document.getElementById('comment').value;
-    //                 vscode.postMessage({
-    //                     command: 'submit',
-    //                     text: comment
-    //                 });
-    //             }
-    //         </script>
-    //     </body>
-    //     </html>`;
-    // }
 
     async openCommentWebview(prItem: any) {
         const pullRequestId = prItem.prId;
@@ -621,151 +585,14 @@ export class PullRequestService {
         </html>`;
     }
 
-    // getWebviewContent(threads: any[]): string {
-    //     const threadsHtml = threads.map(thread => {
-    //         // Sort comments by publishedDate in descending order (newest first)
-    //         const sortedComments = thread.comments.sort((a: any, b: any) => new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime());
-
-    //         const comments = sortedComments.map((comment: any) => `
-    //             <div class="comment">
-    //                 <div class="comment-header">
-    //                     <img src="https://via.placeholder.com/40" class="avatar" alt="User Avatar" />
-    //                     <div class="comment-details">
-    //                         <p class="comment-author">${comment.author.displayName}</p>
-    //                         <p class="comment-date">${new Date(comment.publishedDate).toLocaleString()}</p>
-    //                     </div>
-    //                 </div>
-    //                 <div class="comment-content">${comment.content}</div>
-    //             </div>
-    //         `).join('');
-
-    //         return `
-    //             <div class="thread">
-    //                 ${comments}
-    //             </div>
-    //         `;
-    //     }).join('');
-
-    //     return `
-    //     <!DOCTYPE html>
-    //     <html lang="en">
-    //     <head>
-    //         <meta charset="UTF-8">
-    //         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    //         <title>Add Comment</title>
-    //         <style>
-    //             body { font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px; }
-    //             .threads { margin-bottom: 20px; }
-    //             .thread { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-    //             .comment { border-top: 1px solid #e0e0e0; padding: 10px 0; }
-    //             .comment:first-child { border-top: none; }
-    //             .comment-header { display: flex; align-items: center; margin-bottom: 5px; }
-    //             .avatar { border-radius: 50%; width: 40px; height: 40px; margin-right: 10px; }
-    //             .comment-details { display: flex; flex-direction: column; }
-    //             .comment-author { font-weight: bold; margin: 0; }
-    //             .comment-date { font-size: 0.85em; color: #888; margin: 0; }
-    //             .comment-content { background-color: #f9f9f9; padding: 10px; border-radius: 5px; white-space: pre-wrap; margin-top: 5px; }
-    //             textarea { width: 100%; height: 100px; margin-top: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-    //             button { margin-top: 10px; padding: 10px 15px; border: none; border-radius: 5px; background-color: #007acc; color: #fff; cursor: pointer; }
-    //             button:hover { background-color: #005f99; }
-    //         </style>
-    //     </head>
-    //     <body>
-    //         <h2>Add Comment</h2>
-    //         <form id="commentForm">
-    //             <textarea id="comment" placeholder="Enter your comment here..."></textarea>
-    //             <br>
-    //             <button type="button" onclick="submitComment()">Submit</button>
-    //         </form>
-    //         <script>
-    //             const vscode = acquireVsCodeApi();
-    //             function submitComment() {
-    //                 const comment = document.getElementById('comment').value;
-    //                 vscode.postMessage({
-    //                     command: 'submit',
-    //                     text: comment
-    //                 });
-    //             }
-    //         </script>
-
-    //     </body>
-    //     </html>`;
-    // }
-
-
-
-
-    // getWebviewContent(threads: any[]): string {
-    //     const threadsHtml = threads.map(thread => {
-    //         // Sort comments by publishedDate in descending order (newest first)
-    //         const sortedComments = thread.comments.sort((a: any, b: any) => new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime());
-
-    //         const comments = sortedComments.map((comment: any) => `
-    //             <div class="comment">
-    //                 <p><strong>${comment.author.displayName}</strong> (${new Date(comment.publishedDate).toLocaleString()}):</p>
-    //                 <p class="comment-content">${comment.content}</p>
-    //             </div>
-    //         `).join('');
-
-    //         return `
-    //             <div class="thread">
-    //                 ${comments}
-    //             </div>
-    //         `;
-    //     }).join('');
-
-    //     return `
-    //     <!DOCTYPE html>
-    //     <html lang="en">
-    //     <head>
-    //         <meta charset="UTF-8">
-    //         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    //         <title>Add Comment</title>
-    //         <style>
-    //             body { font-family: Arial, sans-serif; }
-    //             .threads { margin-bottom: 20px; }
-    //             .thread { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-    //             .comment { border-top: 1px solid #eee; padding: 5px; }
-    //             .comment-content { white-space: pre-wrap; } /* Ensure new lines are respected */
-    //             textarea { width: 100%; height: 100px; }
-    //             button { margin-top: 10px; padding: 5px 10px; }
-    //         </style>
-    //     </head>
-    //     <body>
-    //         <h3>Add Comment</h3>
-    //         <form id="commentForm">
-    //             <textarea id="comment" placeholder="Enter your comment here..."></textarea>
-    //             <br>
-    //             <button type="button" onclick="submitComment()">Submit</button>
-    //         </form>
-    //         <script>
-    //             const vscode = acquireVsCodeApi();
-    //             function submitComment() {
-    //                 const comment = document.getElementById('comment').value;
-    //                 vscode.postMessage({
-    //                     command: 'submit',
-    //                     text: comment
-    //                 });
-    //             }
-    //         </script>
-
-    //         <div class="threads">
-    //             <h3>Comments</h3>
-    //             ${threadsHtml || '<p>No existing comments found.</p>'}
-    //         </div>
-    //     </body>
-    //     </html>`;
-    // }
-
     private async handleError(error: unknown) {
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError;
             if (axiosError.response && axiosError.response.status === 401) {
                 await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
-            } else if (axiosError.response && axiosError.response.status === 409)
-            {
-                const errorMessage = axiosError.response.data.message;
-                await vscode.window.showErrorMessage(errorMessage);
+            } else if (axiosError.response && axiosError.response.status === 409) {
+
+                await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
             }
 
             else {

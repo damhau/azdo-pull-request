@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import axios from 'axios';
-
+import axios, { AxiosError } from 'axios';
 
 export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | void> = new vscode.EventEmitter<TreeItem | undefined | void>();
@@ -82,27 +81,48 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
                     });
 
                     const pullRequests = prResponse.data.value.map((pr: any) => {
-                        return new PullRequestItem(pr.title , pr.pullRequestId, repo.name, pr.description, pr.createdBy.displayName, pr.creationDate.split("T")[0]);
+                        return new PullRequestItem(pr.title, pr.pullRequestId, repo.name, pr.description, pr.createdBy.displayName, pr.creationDate.split("T")[0]);
                     });
 
                     // Only return RepositoryItem if it has pull requests
                     if (pullRequests.length > 0) {
                         return new RepositoryItem(repo.name, pullRequests);
                     }
-                } catch (error) {
-                    vscode.window.showWarningMessage(`Failed to fetch pull requests for ${repo.name}: ${error.message}`);
+                } catch (error: unknown) {
+                    return this.handleError(error);
                 }
                 return null;
             }));
 
             // Filter out null values and return only repositories with pull requests
             return repositoryItems.filter((item): item is RepositoryItem => item !== null);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to fetch repositories and pull requests: ${error.message}`);
-            return [];
+            // } catch (error) {
+            //     vscode.window.showErrorMessage(`Failed to fetch repositories and pull requests: ${error.message}`);
+            //     return [];
+            // }
+        } catch (error: unknown) {
+            return this.handleError(error);
         }
     }
 
+    private async handleError(error: unknown) {
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError;
+            if (axiosError.response && axiosError.response.status === 401) {
+                await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
+            } else if (axiosError.response && axiosError.response.status === 409) {
+
+                await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
+            }
+
+            else {
+                await vscode.window.showErrorMessage(`Error: ${axiosError.message}`);
+            }
+        } else {
+            await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
+        }
+        return [];
+    }
 
 }
 

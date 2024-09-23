@@ -6,32 +6,32 @@ import { ConfigurationService } from './ConfigurationService';
 
 export async function activate(context: vscode.ExtensionContext) {
 
-    const secretManager = new SecretManager(context);
+	const secretManager = new SecretManager(context);
 
-    const configurationService = new ConfigurationService(secretManager);
+	const configurationService = new ConfigurationService(secretManager);
 
-    // Check and prompt for configuration only if not already set
-    if (!vscode.workspace.getConfiguration('azureDevopsPullRequest').get<string>('azureDevOpsOrgUrl') || !vscode.workspace.getConfiguration('azureDevopsPullRequest').get<string>('azureDevOpsProject')) {
-        // Prompt for configuration only if not set
-        await configurationService.promptForConfiguration();
-    }
+	// Check and prompt for configuration only if not already set
+	if (!vscode.workspace.getConfiguration('azureDevopsPullRequest').get<string>('azureDevOpsOrgUrl') || !vscode.workspace.getConfiguration('azureDevopsPullRequest').get<string>('azureDevOpsProject')) {
+		// Prompt for configuration only if not set
+		await configurationService.promptForConfiguration();
+	}
 
-    // Load configuration
-    const { azureDevOpsOrgUrl, azureDevOpsProject, azureDevOpsApiVersion, userAgent } = configurationService.getConfiguration();
+	// Load configuration
+	const { azureDevOpsOrgUrl, azureDevOpsProject, azureDevOpsApiVersion, userAgent } = configurationService.getConfiguration();
 
 	const pat = await secretManager.getSecret('PAT');
 
-    console.debug(`Azure Devops Pull Request Started`);
-    console.debug(`Azure DevOps URL: ${azureDevOpsOrgUrl}`);
-    console.debug(`Azure DevOps Project: ${azureDevOpsProject}`);
+	console.debug(`Azure Devops Pull Request Started`);
+	console.debug(`Azure DevOps URL: ${azureDevOpsOrgUrl}`);
+	console.debug(`Azure DevOps Project: ${azureDevOpsProject}`);
 
 
-	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, azureDevOpsProject, userAgent,azureDevOpsApiVersion, pat! );
-	const pullRequestProvider = new PullRequestProvider(azureDevOpsOrgUrl, azureDevOpsProject, userAgent,azureDevOpsApiVersion, pat! );
+	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, azureDevOpsProject, userAgent, azureDevOpsApiVersion, pat!);
+	const pullRequestProvider = new PullRequestProvider(azureDevOpsOrgUrl, azureDevOpsProject, userAgent, azureDevOpsApiVersion, pat!);
 
-    vscode.window.registerTreeDataProvider('pullRequestExplorer', pullRequestProvider);
+	vscode.window.registerTreeDataProvider('pullRequestExplorer', pullRequestProvider);
 
-    context.subscriptions.push(
+	context.subscriptions.push(
 		vscode.commands.registerCommand('azureDevopsPullRequest.listPullRequests', () => {
 			pullRequestProvider.refresh();
 		}),
@@ -43,16 +43,20 @@ export async function activate(context: vscode.ExtensionContext) {
 			pullRequestService.rejectPullRequest(prItem);
 
 		}),
-		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequest', () => {
-			pullRequestService.openCreatePullRequestForm();
-			pullRequestProvider.refresh();
+		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequest', async () => {
+			await pullRequestService.openCreatePullRequestForm();
+			await pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
+
 		}),
+
+
+
 		vscode.commands.registerCommand('azureDevopsPullRequest.refreshPullRequests', () => {
 			pullRequestProvider.refresh(); // Calls the refresh method in the data provider
 		}),
-		vscode.commands.registerCommand('azureDevopsPullRequest.abandonPullRequest', (prItem) => {
-			pullRequestService.abandonPullRequest(prItem);
-			pullRequestProvider.refresh();
+		vscode.commands.registerCommand('azureDevopsPullRequest.abandonPullRequest', async (prItem) => {
+			await pullRequestService.abandonPullRequest(prItem);
+			await pullRequestProvider.refresh();
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.openPullRequestInBrowser', (prItem) => {
 			const prUrl = `${azureDevOpsOrgUrl}/${azureDevOpsProject}/_git/${prItem.repoName}/pullrequest/${prItem.prId}`;
@@ -61,11 +65,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('azureDevopsPullRequest.addCommentToPullRequest', (prItem) => {
 			pullRequestService.openCommentWebview(prItem);
 		})
-    );
+	);
 
 
 }
 
 
 
-export function deactivate() {}
+export function deactivate() { }
