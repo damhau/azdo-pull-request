@@ -17,7 +17,7 @@ export class ConfigurationService {
             azureDevOpsOrgUrl: config.get<string>('azureDevOpsOrgUrl') || '',
             azureDevOpsProject: config.get<string>('azureDevOpsProject') || '',
             azureDevOpsApiVersion: config.get<string>('azureDevOpsApiVersion') || '7.0',
-            userAgent: config.get<string>('userAgent') || `Azure DevOps Pull Request Extension/1.0 (${os.platform()}; ${os.release()})`
+            userAgent: config.get<string>('userAgent') || `azure-devops-pull-request-extension/1.0 (${os.platform()}; ${os.release()})`
 
         };
     }
