@@ -31,6 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	vscode.window.registerTreeDataProvider('pullRequestExplorer', pullRequestProvider);
 
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('azureDevopsPullRequest.listPullRequests', () => {
 			pullRequestProvider.refresh();
@@ -64,7 +65,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.addCommentToPullRequest', (prItem) => {
 			pullRequestService.openCommentWebview(prItem);
-		})
+		}),
+		vscode.commands.registerCommand('azureDevopsPullRequest.viewPullRequestDetails', async (prItem) => {
+			await pullRequestService.openPullRequestDiffView(prItem);
+		}),
 	);
 
 

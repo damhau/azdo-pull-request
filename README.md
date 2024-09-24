@@ -43,6 +43,11 @@ The extension will store your PAT securely using VS Code's Secret Storage.
 1. Click on the Azure DevOps Pull Request view in the Activity Bar.
 2. The extension will display all pull requests for each repository in your configured Azure DevOps project.
 
+### View the content of the Pull Request
+
+1. Select a pull request and click on the file/view (the 1st) button to show the commit and file that were added/changed in the pull request.
+2. The extension will add you as a reviewer and register your vote accordingly.
+
 ### Approve or Reject Pull Request
 
 1. Select a pull request and click on the check or cross button to approve of reject

@@ -21,10 +21,6 @@ export class PullRequestService {
         this.azureDevOpsPat = pat;
     }
 
-
-
-
-
     async abandonPullRequest(prItem: any) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
@@ -132,7 +128,6 @@ export class PullRequestService {
                     }
                 }
             );
-
 
             vscode.window.withProgress(
                 {
@@ -581,6 +576,207 @@ export class PullRequestService {
                 ${threadsHtml || '<p>No existing comments found.</p>'}
             </div>
 
+        </body>
+        </html>`;
+    }
+
+
+    async getPullRequestCommits(prItem: any): Promise<any[]> {
+        const pullRequestId = prItem.prId;
+        const repoName = prItem.repoName;
+        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            return response.data.value || [];
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
+    }
+
+    async getCommitChanges(repoName: string, commitId: string): Promise<any[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/commits/${commitId}/changes?api-version=${this.azureDevOpsApiVersion}`;
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            return response.data.changes || [];
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
+    }
+
+    async openPullRequestDiffView(prItem: any) {
+        // Fetch all commits for the pull request
+        const commits = await this.getPullRequestCommits(prItem);
+        let aggregatedChanges: any[] = [];
+
+        // For each commit, fetch the changes and aggregate them
+        for (const commit of commits) {
+            const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId);
+            aggregatedChanges.push(...commitChanges.map(change => ({
+                ...change,
+                commitId: commit.commitId // Add commit ID to each change
+            })));
+        }
+
+        // Group changes by commitId
+        const groupedChanges = aggregatedChanges.reduce((acc, change) => {
+            if (!acc[change.commitId]) {
+                acc[change.commitId] = [];
+            }
+            acc[change.commitId].push(change);
+            return acc;
+        }, {});
+
+        // Fetch content for each file change
+        const changesWithContent = await Promise.all(
+            Object.keys(groupedChanges).map(async commitId => {
+                const changesForCommit = groupedChanges[commitId];
+                const changesWithContentForCommit = await Promise.all(
+                    changesForCommit
+                    .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
+                    .map(async (change: { item: { url: string; path: any; }; }) => {
+
+                        try {
+                            console.debug(change.item.url);
+                            const fileContent = await this.fetchFileContent(change.item.url);
+                            return {
+                                ...change,
+                                content: fileContent // Add the fetched content to the change object
+                            };
+                        } catch (error) {
+                            console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
+                            return null;
+                        }
+                    })
+                );
+
+                return {
+                    commitId,
+                    changes: changesWithContentForCommit.filter(change => change !== null)
+                };
+            })
+        );
+        //console.debug(changesWithContent);
+        // Create and show a new webview panel
+        const panel = vscode.window.createWebviewPanel(
+            'pullRequestDiff', // Identifies the type of the webview. Used internally
+            `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
+            vscode.ViewColumn.One, // Editor column to show the new webview panel in
+            {
+                enableScripts: true // Enable javascript in the webview
+            }
+        );
+
+        // Generate the HTML content with file contents grouped by commitId
+        panel.webview.html = this.getDiffWebviewContent(changesWithContent);
+    }
+
+    async fetchFileContent(fileUrl: string): Promise<string> {
+
+        try {
+
+            const response = await axios.get(fileUrl, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Accept': 'text/plain',
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            return response.data || 'No content available';
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
+    }
+
+
+
+
+    getDiffWebviewContent(groupedChanges: any[]): string {
+
+        const diffHtml = groupedChanges.map(commitGroup => {
+
+            const commitId = commitGroup.commitId;
+            const changes = commitGroup.changes.map((change: { item: { path: any; }; changeType: any; content: string; }) => {
+                const fullPath = change.item.path; // Full path including subfolders
+                //const fileName = path.basename(fullPath); // Extract only the file name
+                const changeType = change.changeType;
+                const content = change.content || 'No content available'; // Use fetched content
+                // Wrap content in <pre> and <code> tags for code formatting
+                return `
+                    <div class="file-diff">
+                        <h4>${fullPath} (${changeType})</h4>
+                        <div class="file-path">${fullPath}</div> <!-- Display the full path for context -->
+                        <pre><code class="file-content">${content}</code></pre>
+                    </div>
+                `;
+            }).join('');
+
+            // Return the section for each commit
+            return `
+                <section class="commit-section">
+                    <h3>Commit ID: ${commitId}</h3>
+                    ${changes}
+                </section>
+            `;
+        }).join('');
+
+        return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Pull Request Changes</title>
+            <style>
+                body { font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px; }
+                .commit-section { margin-bottom: 30px; }
+                .file-diff { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+                .file-path { font-size: 0.85em; color: #888; margin-bottom: 10px; }
+                .file-content { padding: 10px; border-top: 1px solid #e0e0e0; white-space: pre-wrap; overflow-x: auto; }
+                .add { background-color: #e6ffed; }
+                .del { background-color: #ffeef0; }
+                h3 { margin-top: 0; }
+                h4 { margin-top: 0; }
+                /* Optional Syntax Highlighting Styles */
+                pre, code {
+                    background-color: #f5f5f5;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    font-family: "Courier New", Courier, monospace;
+                }
+                pre {
+                    padding: 15px;
+                    overflow: auto;
+                }
+            </style>
+            <!-- Include highlight.js CSS and JS -->
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+            <script>
+                document.addEventListener("DOMContentLoaded", (event) => {
+                    document.querySelectorAll("pre code").forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                });
+            </script>
+        </head>
+        <body>
+            <h2>Files Changed</h2>
+            ${diffHtml}
         </body>
         </html>`;
     }
