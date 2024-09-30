@@ -90,7 +90,7 @@ export class PullRequestService {
             return false;
         }
 
-        const targetBranch = 'main'; // Assuming main or default branch
+        const targetBranch = 'master'; // Assuming main or default branch
 
         const title = await vscode.window.showInputBox({
             prompt: 'Enter the title for the pull request'
@@ -164,6 +164,7 @@ export class PullRequestService {
                     }
                 }
             );
+
             return response.data.value.map((repo: any) => repo.name); // Return repository IDs
             // } catch (error) {
             //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
@@ -791,7 +792,8 @@ export class PullRequestService {
             }
 
             else {
-                await vscode.window.showErrorMessage(`Error: ${axiosError.message}`);
+                console.debug(`${error.response?.data?.message || error.message}`);
+                await vscode.window.showErrorMessage(`Error: ${error.response?.data?.message || error.message}`);
             }
         } else {
             await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
