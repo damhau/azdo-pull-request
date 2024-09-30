@@ -650,7 +650,6 @@ export class PullRequestService {
                     .map(async (change: { item: { url: string; path: any; }; }) => {
 
                         try {
-                            console.debug(change.item.url);
                             const fileContent = await this.fetchFileContent(change.item.url);
                             return {
                                 ...change,
@@ -684,7 +683,7 @@ export class PullRequestService {
         panel.webview.html = this.getDiffWebviewContent(changesWithContent);
     }
 
-    async fetchFileContent(fileUrl: string): Promise<string> {
+    async fetchFileContent(fileUrl: string): Promise<any> {
 
         try {
 
