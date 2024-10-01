@@ -20,3 +20,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Show file from each commit in the pull request
 
+## 0.3.0
+
+- Add project list
+- Add filter for project
+- fix bug for file content

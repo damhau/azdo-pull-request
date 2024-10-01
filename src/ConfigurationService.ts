@@ -6,17 +6,18 @@ import { SecretManager } from './SecretManager';
 
 export class ConfigurationService {
     private secretManager?: SecretManager;
+    private context?: vscode.ExtensionContext;
 
-    constructor(secretManager?: SecretManager) {
+    constructor(secretManager?: SecretManager, context?: vscode.ExtensionContext) {
         this.secretManager = secretManager;
+        this.context = context;
     }
 
     getConfiguration() {
         const config = vscode.workspace.getConfiguration('azureDevopsPullRequest');
         return {
             azureDevOpsOrgUrl: config.get<string>('azureDevOpsOrgUrl') || '',
-            azureDevOpsProject: config.get<string>('azureDevOpsProject') || '',
-            azureDevOpsApiVersion: config.get<string>('azureDevOpsApiVersion') || '7.0',
+            azureDevOpsApiVersion: config.get<string>('azureDevOpsApiVersion') || '7.1',
             userAgent: config.get<string>('userAgent') || `azure-devops-pull-request-extension/1.0 (${os.platform()}; ${os.release()})`
 
         };
@@ -26,20 +27,12 @@ export class ConfigurationService {
         const config = vscode.workspace.getConfiguration('azureDevopsPullRequest');
 
         let url = config.get<string>('azureDevOpsOrgUrl');
-        let project = config.get<string>('azureDevOpsProject');
         let pat = await this.secretManager!.getSecret('PAT');
 
-        if (!url || !project || !pat) {
+        if (!url || !pat) {
             const inputUrl = await vscode.window.showInputBox({
                 prompt: 'Enter your Azure DevOps organization URL',
                 placeHolder: 'https://dev.azure.com/your-organization',
-                ignoreFocusOut: true
-            });
-
-            const inputProject = await vscode.window.showInputBox({
-                prompt: 'Enter your Azure DevOps Project',
-                placeHolder: 'Enter Project',
-                password: false,
                 ignoreFocusOut: true
             });
 
@@ -51,10 +44,11 @@ export class ConfigurationService {
             });
 
 
-            if (inputUrl && inputProject && inputPat) {
+            if (inputUrl && inputPat) {
                 await vscode.workspace.getConfiguration('azureDevopsPullRequest').update('azureDevOpsOrgUrl', inputUrl, vscode.ConfigurationTarget.Global);
-                await vscode.workspace.getConfiguration('azureDevopsPullRequest').update('azureDevOpsProject', inputProject, vscode.ConfigurationTarget.Global);
                 await this.secretManager!.storeSecret('PAT', inputPat);
+                await this.clearSelectedProjectState();
+                await this.clearFilteredProjectsState();
                 vscode.window.showInformationMessage('Configuration saved successfully.');
                 vscode.commands.executeCommand('workbench.action.reloadWindow');
             } else {
@@ -69,20 +63,11 @@ export class ConfigurationService {
     async updateConfiguration() {
         const config = vscode.workspace.getConfiguration('azureDevopsPullRequest');
         let url = config.get<string>('azureDevOpsOrgUrl');
-        let project = config.get<string>('azureDevOpsProject');
 
         const inputUrl = await vscode.window.showInputBox({
             prompt: 'Enter your Azure DevOps organization URL',
             placeHolder: 'https://dev.azure.com/your-organization',
             value: url,
-            ignoreFocusOut: true
-        });
-
-        const inputProject = await vscode.window.showInputBox({
-            prompt: 'Enter your Azure DevOps Project',
-            placeHolder: 'Enter Project',
-            value: project,
-            password: false,
             ignoreFocusOut: true
         });
 
@@ -94,10 +79,11 @@ export class ConfigurationService {
         });
 
 
-        if (inputUrl && inputProject && inputPat) {
+        if (inputUrl  && inputPat) {
             await vscode.workspace.getConfiguration('azureDevopsPullRequest').update('azureDevOpsOrgUrl', inputUrl, vscode.ConfigurationTarget.Global);
-            await vscode.workspace.getConfiguration('azureDevopsPullRequest').update('azureDevOpsProject', inputProject, vscode.ConfigurationTarget.Global);
             await this.secretManager!.storeSecret('PAT', inputPat);
+            await this.clearSelectedProjectState();
+            await this.clearFilteredProjectsState();
             vscode.window.showInformationMessage('Configuration saved successfully.');
             vscode.commands.executeCommand('workbench.action.reloadWindow');
         } else {
@@ -120,5 +106,31 @@ export class ConfigurationService {
         } else {
             vscode.window.showErrorMessage('Failed to get configuration.');
         }
+    }
+    // Store the selected project in globalState
+    // Store the selected project in globalState
+    async updateSelectedProjectInGlobalState(projectId: string) {
+        await this.context?.globalState.update('azureDevOpsSelectedProjectPR', projectId);
+    }
+
+    getSelectedProjectFromGlobalState(): string | undefined {
+        const selectedProject = this.context?.globalState.get<string>('azureDevOpsSelectedProjectPR');
+        return selectedProject;
+    }
+
+    async clearSelectedProjectState(): Promise<void> {
+        await this.context?.globalState.update('azureDevOpsSelectedProjectPR', undefined);
+    }
+
+    async updateFilteredprojectInGlobalState(projectIds: string[]) {
+        await this.context?.globalState.update('azureDevOpsFilteredProjectsPR', projectIds);
+    }
+
+    getFilteredProjectsFromGlobalState(): string[] | undefined {
+        return this.context?.globalState.get<string[]>('azureDevOpsFilteredProjectsPR');
+    }
+
+    async clearFilteredProjectsState(): Promise<void> {
+        await this.context?.globalState.update('azureDevOpsFilteredProjectsPR', undefined);
     }
 }

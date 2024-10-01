@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
 import * as vscode from 'vscode';
+import { ConfigurationService } from './ConfigurationService';
 
 axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
@@ -8,23 +9,23 @@ axiosRetry(axios, {
 
 export class PullRequestService {
     private azureDevOpsOrgUrl: string;
-    private azureDevOpsProject: string;
     private userAgent: string;
     private azureDevOpsApiVersion: string;
     private azureDevOpsPat: string;
 
-    constructor(orgUrl: string, project: string, userAgent: string, apiVersion: string, pat: string) {
+    private repository: any;
+
+    constructor(orgUrl: string, userAgent: string, apiVersion: string, pat: string) {
         this.azureDevOpsOrgUrl = orgUrl;
-        this.azureDevOpsProject = project;
         this.userAgent = userAgent;
         this.azureDevOpsApiVersion = apiVersion;
         this.azureDevOpsPat = pat;
     }
 
-    async abandonPullRequest(prItem: any) {
+    async abandonPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
 
         const confirm = await vscode.window.showWarningMessage(
             `Are you sure you want to abandon this pull request?`,
@@ -71,17 +72,25 @@ export class PullRequestService {
         }
     }
 
-    async openCreatePullRequestForm(): Promise<boolean> {
-        const repository = await vscode.window.showQuickPick(this.getRepositories(), {
-            placeHolder: 'Select the repository for the pull request'
-        });
+    async openCreatePullRequestForm(azureSelectedDevOpsProject: string, repositoryId?: string): Promise<boolean> {
+        if (repositoryId === undefined){
+            this.repository = await vscode.window.showQuickPick(this.getRepositories(azureSelectedDevOpsProject), {
+                placeHolder: 'Select the repository for the pull request'
+            });
 
-        if (!repository) {
-            vscode.window.showErrorMessage('Repository is required to create a pull request.');
-            return false;
+            if (!this.repository) {
+                vscode.window.showErrorMessage('Repository is required to create a pull request.');
+                return false;
+            }
+
+
+        }else{
+
+            this.repository = repositoryId;
         }
 
-        const sourceBranch = await vscode.window.showQuickPick(this.getBranches(repository), {
+
+        const sourceBranch = await vscode.window.showQuickPick(this.getBranches(this.repository, azureSelectedDevOpsProject), {
             placeHolder: 'Select the source branch for the pull request'
         });
 
@@ -90,7 +99,13 @@ export class PullRequestService {
             return false;
         }
 
-        const targetBranch = 'master'; // Assuming main or default branch
+        const targetBranch = await this.getDefaultBranch(this.repository, azureSelectedDevOpsProject); // Fetch the default branch dynamically
+        if (!targetBranch) {
+            vscode.window.showErrorMessage('Could not find the default branch for the repository.');
+            return false;
+        }
+
+
 
         const title = await vscode.window.showInputBox({
             prompt: 'Enter the title for the pull request'
@@ -105,12 +120,12 @@ export class PullRequestService {
             prompt: 'Enter the description for the pull request (optional)'
         });
 
-        await this.createPullRequest(repository, sourceBranch, targetBranch, title, description || '');
+        await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject);
         return true;
     }
 
-    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string) {
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repository}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
+    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string, azureSelectedDevOpsProject: string) {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repository}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.post(
@@ -151,8 +166,8 @@ export class PullRequestService {
         }
     }
 
-    async getRepositories(): Promise<string[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
+    async getRepositories(azureSelectedDevOpsProject: string): Promise<string[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -165,7 +180,10 @@ export class PullRequestService {
                 }
             );
 
-            return response.data.value.map((repo: any) => repo.name); // Return repository IDs
+            // return response.data.value.map((repo: any) => repo.name); // Return repository IDs
+            return response.data.value
+            .map((repo: any) => repo.name) // Extract the repository names
+            .sort((a: string, b: string) => a.localeCompare(b)); // Sort alphabetically
             // } catch (error) {
             //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
             //     return [];
@@ -175,8 +193,8 @@ export class PullRequestService {
         }
     }
 
-    async getRepositoriesAll(): Promise<string[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
+    async getRepositoriesAll(azureSelectedDevOpsProject: string): Promise<string[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -199,8 +217,8 @@ export class PullRequestService {
     }
 
 
-    async getBranches(repositoryId: string): Promise<string[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repositoryId}/refs?filter=heads/&api-version=${this.azureDevOpsApiVersion}`;
+    async getBranches(repositoryId: string, azureSelectedDevOpsProject: string): Promise<string[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}/refs?filter=heads/&api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -224,7 +242,7 @@ export class PullRequestService {
 
 
 
-    async approvePullRequest(prItem: any) {
+    async approvePullRequest(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -249,7 +267,7 @@ export class PullRequestService {
                 );
 
                 const reviewerId = reviewerResponse.data.authenticatedUser.id; // Use your user ID as reviewerId
-                const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
                 // Step 2: Add yourself as a reviewer and set vote to 10 (Approve)
                 const response = await axios.put(
                     url,
@@ -274,7 +292,7 @@ export class PullRequestService {
     }
 
 
-    async rejectPullRequest(prItem: any) {
+    async rejectPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -299,7 +317,7 @@ export class PullRequestService {
                 );
 
                 const reviewerId = reviewerResponse.data.authenticatedUser.id; // Use your user ID as reviewerId
-                const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
                 // Step 2: Add yourself as a reviewer and set vote to 10 (Approve)
                 const response = await axios.put(
                     url,
@@ -323,7 +341,7 @@ export class PullRequestService {
         }
     }
 
-    async addCommentToPullRequest(prItem: any) {
+    async addCommentToPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -348,7 +366,7 @@ export class PullRequestService {
                 progress.report({ message: `Adding comment to PR #${pullRequestId}` });
 
                 // Construct the URL for adding a comment
-                const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
 
                 // Prepare the comment thread object
                 const commentThread = {
@@ -379,7 +397,7 @@ export class PullRequestService {
     }
 
 
-    async addCommentToPullRequest2(prItem: any, comment: string) {
+    async addCommentToPullRequest2(prItem: any, comment: string, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -392,7 +410,7 @@ export class PullRequestService {
                 progress.report({ message: `Adding comment to PR #${pullRequestId}` });
 
                 // Construct the URL for adding a comment
-                const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
 
                 // Prepare the comment thread object
                 const commentThread = {
@@ -423,12 +441,12 @@ export class PullRequestService {
         }
     }
 
-    async openCommentWebview(prItem: any) {
+    async openCommentWebview(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
         // Fetch existing comment threads for the pull request
-        const threads = await this.getCommentThreads(prItem);
+        const threads = await this.getCommentThreads(prItem, azureSelectedDevOpsProject);
 
         const sortedthreads = threads.sort((a: any, b: any) => {
             const latestCommentA = a.comments.reduce((latest: any, comment: any) =>
@@ -463,7 +481,7 @@ export class PullRequestService {
                 if (message.command === 'submit') {
                     const comment = message.text;
                     if (comment) {
-                        await this.addCommentToPullRequest2(prItem, comment);
+                        await this.addCommentToPullRequest2(prItem, comment, azureSelectedDevOpsProject);
                         panel.dispose(); // Close the panel after adding the comment
                     } else {
                         vscode.window.showErrorMessage('Comment cannot be empty.');
@@ -479,11 +497,11 @@ export class PullRequestService {
 
 
     // Method to fetch comment threads from the Azure DevOps API
-    async getCommentThreads(prItem: any): Promise<any[]> {
+    async getCommentThreads(prItem: any, azureSelectedDevOpsProject: string): Promise<any[]> {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
         try {
-            const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=7.2-preview.1`;
+            const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=7.2-preview.1`;
 
             const response = await axios.get(url, {
                 headers: {
@@ -582,10 +600,10 @@ export class PullRequestService {
     }
 
 
-    async getPullRequestCommits(prItem: any): Promise<any[]> {
+    async getPullRequestCommits(prItem: any, azureSelectedDevOpsProject: string): Promise<any[]> {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
@@ -601,8 +619,8 @@ export class PullRequestService {
         }
     }
 
-    async getCommitChanges(repoName: string, commitId: string): Promise<any[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repoName}/commits/${commitId}/changes?api-version=${this.azureDevOpsApiVersion}`;
+    async getCommitChanges(repoName: string, commitId: string, azureSelectedDevOpsProject: string): Promise<any[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/commits/${commitId}/changes?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
@@ -618,14 +636,181 @@ export class PullRequestService {
         }
     }
 
-    async openPullRequestDiffView(prItem: any) {
+    // async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
+
+    //     // Fetch all commits for the pull request
+    //     const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
+    //     let aggregatedChanges: any[] = [];
+
+    //     // For each commit, fetch the changes and aggregate them
+    //     for (const commit of commits) {
+    //         const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
+    //         aggregatedChanges.push(...commitChanges.map(change => ({
+    //             ...change,
+    //             commitId: commit.commitId // Add commit ID to each change
+    //         })));
+    //     }
+
+    //     // Group changes by commitId
+    //     const groupedChanges = aggregatedChanges.reduce((acc, change) => {
+    //         if (!acc[change.commitId]) {
+    //             acc[change.commitId] = [];
+    //         }
+    //         acc[change.commitId].push(change);
+    //         return acc;
+    //     }, {});
+
+    //     // Fetch content for each file change
+    //     const changesWithContent = await Promise.all(
+    //         Object.keys(groupedChanges).map(async commitId => {
+    //             const changesForCommit = groupedChanges[commitId];
+    //             const changesWithContentForCommit = await Promise.all(
+    //                 changesForCommit
+    //                 .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
+    //                 .map(async (change: {
+    //                     changeType: string; item: { url: string; path: any; };
+    //                     }) => {
+    //                     if (change.changeType === 'delete') {
+    //                         return {
+    //                             ...change
+    //                         };
+    //                     }else{
+    //                         try {
+    //                             const fileContent = await this.fetchFileContent(change.item.url);
+    //                             return {
+    //                                 ...change,
+    //                                 content: fileContent // Add the fetched content to the change object
+    //                             };
+    //                         } catch (error) {
+    //                             console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
+    //                             return null;
+    //                         }
+    //                     }
+    //                 })
+    //             );
+
+    //             return {
+    //                 commitId,
+    //                 changes: changesWithContentForCommit.filter(change => change !== null)
+    //             };
+    //         })
+    //     );
+
+    //     // Create and show a new webview panel
+    //     const panel = vscode.window.createWebviewPanel(
+    //         'pullRequestDiff', // Identifies the type of the webview. Used internally
+    //         `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
+    //         vscode.ViewColumn.One, // Editor column to show the new webview panel in
+    //         {
+    //             enableScripts: true // Enable javascript in the webview
+    //         }
+    //     );
+
+    //     // Generate the HTML content with file contents grouped by commitId
+    //     panel.webview.html = this.getDiffWebviewContent(changesWithContent);
+    // }
+
+    // async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
+
+    //     // Fetch all commits for the pull request
+    //     const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
+    //     let aggregatedChanges: any[] = [];
+
+    //     // For each commit, fetch the changes and aggregate them
+    //     for (const commit of commits) {
+    //         const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
+    //         aggregatedChanges.push(...commitChanges.map(change => ({
+    //             ...change,
+    //             commitId: commit.commitId // Add commit ID to each change
+    //         })));
+    //     }
+
+    //     // Group changes by commitId
+    //     const groupedChanges = aggregatedChanges.reduce((acc, change) => {
+    //         if (!acc[change.commitId]) {
+    //             acc[change.commitId] = [];
+    //         }
+    //         acc[change.commitId].push(change);
+    //         return acc;
+    //     }, {});
+
+    //     // Use vscode.window.withProgress for fetching content
+    //     const changesWithContent = await vscode.window.withProgress({
+    //         location: vscode.ProgressLocation.Notification,
+    //         title: "Fetching File Contents",
+    //         cancellable: false
+    //     }, async (progress) => {
+
+    //         progress.report({ increment: 0, message: "Starting to fetch file contents..." });
+
+    //         let totalFiles = Object.keys(groupedChanges).reduce((acc, commitId) => {
+    //             return acc + groupedChanges[commitId].length;
+    //         }, 0);
+    //         let processedFiles = 0;
+
+    //         const changesWithContentForCommits = await Promise.all(
+    //             Object.keys(groupedChanges).map(async commitId => {
+    //                 const changesForCommit = groupedChanges[commitId];
+    //                 const changesWithContentForCommit = await Promise.all(
+    //                     changesForCommit
+    //                         .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
+    //                         .map(async (change: {
+    //                             changeType: string; item: { url: string; path: any; };
+    //                         }) => {
+    //                             if (change.changeType === 'delete') {
+    //                                 processedFiles++;
+    //                                 progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Processed ${processedFiles} of ${totalFiles} files` });
+    //                                 return {
+    //                                     ...change
+    //                                 };
+    //                             } else {
+    //                                 try {
+    //                                     const fileContent = await this.fetchFileContent(change.item.url);
+    //                                     processedFiles++;
+    //                                     progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Fetched ${processedFiles} of ${totalFiles} files` });
+    //                                     return {
+    //                                         ...change,
+    //                                         content: fileContent // Add the fetched content to the change object
+    //                                     };
+    //                                 } catch (error) {
+    //                                     console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
+    //                                     return null;
+    //                                 }
+    //                             }
+    //                         })
+    //                 );
+    //                 return {
+    //                     commitId,
+    //                     changes: changesWithContentForCommit.filter(change => change !== null)
+    //                 };
+    //             })
+    //         );
+
+    //         return changesWithContentForCommits;
+    //     });
+
+    //     // Create and show a new webview panel
+    //     const panel = vscode.window.createWebviewPanel(
+    //         'pullRequestDiff', // Identifies the type of the webview. Used internally
+    //         `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
+    //         vscode.ViewColumn.One, // Editor column to show the new webview panel in
+    //         {
+    //             enableScripts: true // Enable javascript in the webview
+    //         }
+    //     );
+
+    //     // Generate the HTML content with file contents grouped by commitId
+    //     panel.webview.html = this.getDiffWebviewContent(changesWithContent);
+    // }
+
+    async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
         // Fetch all commits for the pull request
-        const commits = await this.getPullRequestCommits(prItem);
+        const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
         let aggregatedChanges: any[] = [];
 
         // For each commit, fetch the changes and aggregate them
         for (const commit of commits) {
-            const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId);
+            const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
             aggregatedChanges.push(...commitChanges.map(change => ({
                 ...change,
                 commitId: commit.commitId // Add commit ID to each change
@@ -641,35 +826,61 @@ export class PullRequestService {
             return acc;
         }, {});
 
-        // Fetch content for each file change
-        const changesWithContent = await Promise.all(
-            Object.keys(groupedChanges).map(async commitId => {
-                const changesForCommit = groupedChanges[commitId];
-                const changesWithContentForCommit = await Promise.all(
-                    changesForCommit
-                    .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
-                    .map(async (change: { item: { url: string; path: any; }; }) => {
+        // Use vscode.window.withProgress for fetching content
+        const changesWithContent = await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Fetching File Contents",
+            cancellable: false
+        }, async (progress) => {
+            let processedFiles = 0;
+            let totalFiles = Object.keys(groupedChanges).reduce((acc, commitId) => {
+                return acc + groupedChanges[commitId].length;
+            }, 0);
 
-                        try {
-                            const fileContent = await this.fetchFileContent(change.item.url);
-                            return {
-                                ...change,
-                                content: fileContent // Add the fetched content to the change object
-                            };
-                        } catch (error) {
-                            console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
-                            return null;
-                        }
-                    })
-                );
+            // Ensure we see the initial progress report
+            progress.report({ increment: 0, message: "Starting to fetch file contents..." });
 
-                return {
-                    commitId,
-                    changes: changesWithContentForCommit.filter(change => change !== null)
-                };
-            })
-        );
-        //console.debug(changesWithContent);
+            const changesWithContentForCommits = await Promise.all(
+                Object.keys(groupedChanges).map(async commitId => {
+                    const changesForCommit = groupedChanges[commitId];
+                    const changesWithContentForCommit = await Promise.all(
+                        changesForCommit
+                            .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
+                            .map(async (change: {
+                                changeType: string; item: { url: string; path: any; };
+                            }) => {
+                                if (change.changeType === 'delete') {
+                                    processedFiles++;
+                                    progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Processed ${processedFiles} of ${totalFiles} files` });
+                                    return {
+                                        ...change
+                                    };
+                                } else {
+                                    try {
+                                        const fileContent = await this.fetchFileContent(change.item.url);
+                                        processedFiles++;
+                                        progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Fetched ${processedFiles} of ${totalFiles} files` });
+                                        return {
+                                            ...change,
+                                            content: fileContent // Add the fetched content to the change object
+                                        };
+                                    } catch (error) {
+                                        console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
+                                        return null;
+                                    }
+                                }
+                            })
+                    );
+                    return {
+                        commitId,
+                        changes: changesWithContentForCommit.filter(change => change !== null)
+                    };
+                })
+            );
+
+            return changesWithContentForCommits;
+        });
+
         // Create and show a new webview panel
         const panel = vscode.window.createWebviewPanel(
             'pullRequestDiff', // Identifies the type of the webview. Used internally
@@ -685,24 +896,16 @@ export class PullRequestService {
     }
 
     async fetchFileContent(fileUrl: string): Promise<any> {
+        const response = await axios.get(fileUrl, {
+            headers: {
+                'User-Agent': this.userAgent,
+                'Accept': 'text/plain',
+                'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+            }
+        });
 
-        try {
-
-            const response = await axios.get(fileUrl, {
-                headers: {
-                    'User-Agent': this.userAgent,
-                    'Accept': 'text/plain',
-                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                }
-            });
-
-            return response.data || 'No content available';
-        } catch (error: unknown) {
-            return this.handleError(error);
-        }
+        return response.data || 'No content available';
     }
-
-
 
 
     getDiffWebviewContent(groupedChanges: any[]): string {
@@ -781,6 +984,34 @@ export class PullRequestService {
         </html>`;
     }
 
+
+    async getDefaultBranch(repositoryId: string, azureSelectedDevOpsProject: string): Promise<string | null> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}?api-version=${this.azureDevOpsApiVersion}`;
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            // The default branch is returned as "defaultBranch"
+            const defaultBranch = response.data.defaultBranch;
+
+            if (defaultBranch) {
+                return defaultBranch.replace('refs/heads/', ''); // Remove the 'refs/heads/' prefix
+            } else {
+                vscode.window.showWarningMessage('Default branch not found.');
+                return null;
+            }
+        } catch (error: unknown) {
+            await this.handleError(error);
+            return null;
+        }
+    }
+
+
     private async handleError(error: unknown) {
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError;
@@ -792,7 +1023,6 @@ export class PullRequestService {
             }
 
             else {
-                console.debug(`${error.response?.data?.message || error.message}`);
                 await vscode.window.showErrorMessage(`Error: ${error.response?.data?.message || error.message}`);
             }
         } else {

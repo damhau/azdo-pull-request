@@ -2,7 +2,7 @@
   "name": "azure-devops-review-pull-request",
   "displayName": "Azure Devops Review Pull Request",
   "description": "The Azure DevOps Review Pull Request extension for Visual Studio Code enables users to manage their pull requests",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -29,8 +29,13 @@
     "views": {
       "azureDevOps": [
         {
+          "id": "projectExplorer",
+          "name": "Azure DevOps Projects",
+          "when": "true"
+        },
+        {
           "id": "pullRequestExplorer",
-          "name": "Pull Requests"
+          "name": "Azure DevOps Repositories"
         }
       ]
     },
@@ -52,6 +57,11 @@
       {
         "command": "azureDevopsPullRequest.createPullRequest",
         "title": "Create New Pull Request",
+        "icon": "$(add)"
+      },
+      {
+        "command": "azureDevopsPullRequest.createPullRequestNewRepo",
+        "title": "Create New Pull Request for New Repository",
         "icon": "$(add)"
       },
       {
@@ -78,10 +88,29 @@
         "command": "azureDevopsPullRequest.viewPullRequestDetails",
         "title": "View Pull Request Details",
         "icon": "$(list-flat)"
+      },
+      {
+        "command": "azureDevopsPullRequest.configure",
+        "title": "AzDo PR Review: Configure",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "azureDevopsPullRequest.updatePat",
+        "title": "AzDo PR Review: Update PAT"
+      },
+      {
+        "command": "azureDevopsPullRequest.selectProjectsToShow",
+        "title": "AzDo PR Review: Select Projects to Show",
+        "icon": "$(filter)"
       }
     ],
     "menus": {
       "view/item/context": [
+        {
+          "command": "azureDevopsPullRequest.createPullRequest",
+          "when": "view == pullRequestExplorer && viewItem == repositoryItem",
+          "group": "inline@1"
+        },
         {
           "command": "azureDevopsPullRequest.viewPullRequestDetails",
           "when": "view == pullRequestExplorer && viewItem == pullRequestItem",
@@ -114,14 +143,25 @@
         }
       ],
       "view/title": [
+
         {
-          "command": "azureDevopsPullRequest.createPullRequest",
+          "command": "azureDevopsPullRequest.refreshPullRequests",
           "when": "view == pullRequestExplorer",
           "group": "navigation"
         },
         {
-          "command": "azureDevopsPullRequest.refreshPullRequests",
+          "command": "azureDevopsPullRequest.createPullRequestNewRepo",
           "when": "view == pullRequestExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "azureDevopsPullRequest.configure",
+          "when": "view == projectExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "azureDevopsPullRequest.selectProjectsToShow",
+          "when": "view == projectExplorer",
           "group": "navigation"
         }
       ]

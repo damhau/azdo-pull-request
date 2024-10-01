@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import axios, { AxiosError } from 'axios';
+import { ConfigurationService } from './ConfigurationService';
 
 export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | void> = new vscode.EventEmitter<TreeItem | undefined | void>();
@@ -9,14 +10,12 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
     private loading: boolean = false; // State to show if loading
 
     private azureDevOpsOrgUrl: string;
-    private azureDevOpsProject: string;
     private userAgent: string;
     private azureDevOpsApiVersion: string;
     private azureDevOpsPat: string;
 
-    constructor(orgUrl: string, project: string, userAgent: string, apiVersion: string, pat: string) {
+    constructor(orgUrl: string, userAgent: string, apiVersion: string, pat: string, private configurationService: ConfigurationService) {
         this.azureDevOpsOrgUrl = orgUrl;
-        this.azureDevOpsProject = project;
         this.userAgent = userAgent;
         this.azureDevOpsApiVersion = apiVersion;
         this.azureDevOpsPat = pat;
@@ -57,6 +56,10 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
 
 
     getChildren(element?: TreeItem): Thenable<TreeItem[]> {
+
+
+
+
         if (this.loading) {
             return Promise.resolve([new LoadingItem()]);
         }
@@ -71,9 +74,20 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async fetchAllRepositoriesAndPullRequests(): Promise<RepositoryItem[]> {
 
+
         try {
+
+            const azureDevOpsSelectedProject = this.configurationService.getSelectedProjectFromGlobalState();
+            // Check if no project is selected
+            if (!azureDevOpsSelectedProject) {
+                return [];
+            }
+
+
+
+
             // Step 1: Fetch all repositories
-            const repoResponse = await axios.get(`${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`, {
+            const repoResponse = await axios.get(`${this.azureDevOpsOrgUrl}/${azureDevOpsSelectedProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`, {
                 headers: {
                     'User-Agent': this.userAgent,
                     'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
@@ -85,10 +99,9 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
             const repositories = repoResponse.data.value;
 
             // Step 2: Fetch pull requests for all repositories in parallel
-
             const repositoryItems = await Promise.all(repositories.map(async (repo: any) => {
                 try {
-                    const prResponse = await axios.get(`${this.azureDevOpsOrgUrl}/${this.azureDevOpsProject}/_apis/git/repositories/${repo.id}/pullrequests?api-version=${this.azureDevOpsApiVersion}`, {
+                    const prResponse = await axios.get(`${this.azureDevOpsOrgUrl}/${azureDevOpsSelectedProject}/_apis/git/repositories/${repo.id}/pullrequests?api-version=${this.azureDevOpsApiVersion}`, {
                         headers: {
                             'User-Agent': this.userAgent,
                             'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
@@ -96,14 +109,13 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
 
                         }
                     });
-
                     const pullRequests = prResponse.data.value.map((pr: any) => {
                         return new PullRequestItem(pr.title, pr.pullRequestId, repo.name, pr.description, pr.createdBy.displayName, pr.creationDate.split("T")[0]);
                     });
 
                     // Only return RepositoryItem if it has pull requests
                     if (pullRequests.length > 0) {
-                        return new RepositoryItem(repo.name, pullRequests);
+                        return new RepositoryItem(repo.name, repo.id,  pullRequests);
                     }
                 } catch (error: unknown) {
                     return this.handleError(error);
@@ -155,6 +167,7 @@ class TreeItem extends vscode.TreeItem {
 class RepositoryItem extends TreeItem {
     constructor(
         public readonly repoName: string,
+        public readonly repoId: string,
         public readonly pullRequests: PullRequestItem[]
     ) {
         super(repoName, vscode.TreeItemCollapsibleState.Collapsed);
@@ -168,6 +181,14 @@ class LoadingItem extends TreeItem {
     constructor() {
         super('Loading...', vscode.TreeItemCollapsibleState.None);
         this.iconPath = new vscode.ThemeIcon('sync~spin'); // Shows the spinner icon
+    }
+}
+
+// Loading indicator item to show during refresh
+class NoProjectItem extends TreeItem {
+    constructor() {
+        super('Select a project to show repositories', vscode.TreeItemCollapsibleState.None);
+        //this.iconPath = new vscode.ThemeIcon('sync~spin'); // Shows the spinner icon
     }
 }
 
