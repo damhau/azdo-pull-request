@@ -2,7 +2,7 @@
   "name": "azure-devops-review-pull-request",
   "displayName": "Azure Devops Review Pull Request",
   "description": "The Azure DevOps Review Pull Request extension for Visual Studio Code enables users to manage their pull requests",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "engines": {
     "vscode": "^1.93.0"
   },

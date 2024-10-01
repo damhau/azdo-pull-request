@@ -42,9 +42,9 @@ export async function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true, // Optional: Shows a "collapse all" button
     });
 
-	vscode.window.registerTreeDataProvider('projectExplorer', projectProvider);
+	vscode.window.registerTreeDataProvider('projectExplorerPR', projectProvider);
 
-    vscode.window.createTreeView('projectExplorer', {
+    vscode.window.createTreeView('projectExplorerPR', {
         treeDataProvider: projectProvider,
         showCollapseAll: true
     });
