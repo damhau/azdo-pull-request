@@ -189,7 +189,8 @@ export class PullRequestService {
                     }
                 }
             );
-
+            const prItem = { "repoName": repository , "prId": response.data.pullRequestId};
+            await vscode.commands.executeCommand("azureDevopsPullRequest.copyPullRequestUrl", prItem);
 
         } catch (error: unknown) {
             return this.handleError(error);

@@ -25,3 +25,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Add project list
 - Add filter for project
 - fix bug for file content
+
+
+## 0.3.4
+
+- The url of a newly created PR is copied automatically in the clipboard
