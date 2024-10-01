@@ -1,7 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
 import * as vscode from 'vscode';
-import { ConfigurationService } from './ConfigurationService';
 
 axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
@@ -120,11 +119,23 @@ export class PullRequestService {
             prompt: 'Enter the description for the pull request (optional)'
         });
 
-        await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject);
+
+        const configureAutoComplete = await vscode.window.showQuickPick(['Yes', 'No'], {
+            placeHolder: 'Do you want to enable auto complete on the pull request?'
+        });
+
+        let autoComplete: boolean;
+        if (configureAutoComplete === "Yes") {
+            autoComplete = true;
+        } else {
+            autoComplete = false;
+        }
+
+        await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject, autoComplete);
         return true;
     }
 
-    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string, azureSelectedDevOpsProject: string) {
+    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string, azureSelectedDevOpsProject: string, enableAutoComplete: boolean) {
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repository}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
@@ -159,12 +170,85 @@ export class PullRequestService {
                     }
                 }
             );
+            const autoCompleteSetBy = await this.getLoggedInUserId();
+            console.log('Auto-complete set by:', autoCompleteSetBy);
+            await this.enableAutoComplete(response.data.pullRequestId, repository, azureSelectedDevOpsProject, autoCompleteSetBy);
+
+            vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Enabling Auto Complete: ${response.data.pullRequestId}`,
+                    cancellable: false,
+                },
+                async (progress, token) => {
+                    for (let i = 0; i < 2; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        setTimeout(() => {
+                            progress.report({ increment: i * 10, message: '' });
+                        }, 10000);
+                    }
+                }
+            );
 
 
         } catch (error: unknown) {
             return this.handleError(error);
         }
     }
+
+    async enableAutoComplete(pullRequestId: number, repositoryId: string, azureSelectedDevOpsProject: string, autoCompleteSetBy: string) {
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
+
+        const payload = {
+            "completionOptions": {
+                "autoCompleteIgnoreConfigIds": [],
+                "bypassPolicy": false,
+                "deleteSourceBranch": true,
+                "mergeStrategy": 1,
+                "transitionWorkItems": false,
+            },
+            "autoCompleteSetBy": {
+                "id": autoCompleteSetBy // "c2a1adea-d7bc-4365-a58d-db431cecfcdc" // User ID that sets the auto-complete
+            }
+        };
+        console.debug('Auto-complete payload:', payload);
+        try {
+            const response = await axios.patch(url, payload, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Content-Type': 'application/json',
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+            console.log('Auto-complete enabled for the PR:', response.data);
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
+    }
+
+    async getLoggedInUserId() {
+        try {
+
+            const userResponse = await axios.get(
+                `${this.azureDevOpsOrgUrl}/_apis/connectionData`,
+                {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    }
+                }
+            );
+
+            return userResponse.data.authenticatedUser.id;
+
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
+    }
+
+
+
+
 
     async getRepositories(azureSelectedDevOpsProject: string): Promise<string[]> {
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;

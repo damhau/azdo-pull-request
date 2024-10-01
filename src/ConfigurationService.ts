@@ -1,4 +1,3 @@
-// src/ConfigurationService.ts
 import * as vscode from 'vscode';
 import * as os from 'os';
 
@@ -107,8 +106,7 @@ export class ConfigurationService {
             vscode.window.showErrorMessage('Failed to get configuration.');
         }
     }
-    // Store the selected project in globalState
-    // Store the selected project in globalState
+
     async updateSelectedProjectInGlobalState(projectId: string) {
         await this.context?.globalState.update('azureDevOpsSelectedProjectPR', projectId);
     }

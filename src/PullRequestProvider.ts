@@ -39,26 +39,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
 
-
-    // getTreeItem(element: TreeItem): vscode.TreeItem {
-    //     const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
-
-    //     if (element instanceof PullRequestItem) {
-    //         treeItem.command = {
-    //             command: 'azureDevopsPullRequest.viewPullRequestDetails',
-    //             title: 'View Pull Request Details',
-    //             arguments: [element]
-    //         };
-    //     }
-
-    //     return treeItem;
-    // }
-
-
     getChildren(element?: TreeItem): Thenable<TreeItem[]> {
-
-
-
 
         if (this.loading) {
             return Promise.resolve([new LoadingItem()]);
@@ -181,14 +162,6 @@ class LoadingItem extends TreeItem {
     constructor() {
         super('Loading...', vscode.TreeItemCollapsibleState.None);
         this.iconPath = new vscode.ThemeIcon('sync~spin'); // Shows the spinner icon
-    }
-}
-
-// Loading indicator item to show during refresh
-class NoProjectItem extends TreeItem {
-    constructor() {
-        super('Select a project to show repositories', vscode.TreeItemCollapsibleState.None);
-        //this.iconPath = new vscode.ThemeIcon('sync~spin'); // Shows the spinner icon
     }
 }
 

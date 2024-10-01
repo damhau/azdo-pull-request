@@ -104,6 +104,20 @@ export async function activate(context: vscode.ExtensionContext) {
             await projectProvider.promptForProjectSelection();
             pullRequestProvider.refresh();
         }),
+		vscode.commands.registerCommand('azureDevopsPullRequest.copyPullRequestUrl', async (prItem) => {
+			const azureDevOpsOrgUrl = configurationService.getConfiguration().azureDevOpsOrgUrl;
+			const project = configurationService.getSelectedProjectFromGlobalState();
+
+			if (!azureDevOpsOrgUrl || !project) {
+				vscode.window.showErrorMessage('Failed to copy the pull request URL: Missing configuration.');
+				return;
+			}
+
+			const prUrl = `${azureDevOpsOrgUrl}/${project}/_git/${prItem.repoName}/pullrequest/${prItem.prId}`;
+			await vscode.env.clipboard.writeText(prUrl);
+
+
+		})
 	);
 
 
