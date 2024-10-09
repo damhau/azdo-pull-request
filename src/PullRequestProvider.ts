@@ -69,7 +69,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
     }
 
 
-    async generatePullRequestItems(project: string, prItem: PullRequestItem): Promise<Map<string, FileItem>> {
+    private async generatePullRequestItems(project: string, prItem: PullRequestItem): Promise<Map<string, FileItem>> {
 
         try {
             const commits = await this.pullRequestService.getPullRequestCommits(project, prItem.repoName , prItem.prId);
@@ -95,7 +95,8 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
 
             return fileMap;
         } catch (error) {
-            return this.handleError(error);
+            this.handleError(error);
+            return new Map<string, FileItem>();
         }
     }
 
@@ -164,7 +165,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
 
         fileMap.forEach((fileItem, filePath) => {
             const parts = filePath.split('/').filter(Boolean); // Split path into folder parts and remove empty parts
-            let currentChildren = rootFolders; // Start at the root level
+            let currentChildren: FolderItem[] = rootFolders; // Start at the root level
 
             // Traverse through each folder in the path
             parts.slice(0, -1).forEach((folderName) => {
@@ -175,16 +176,25 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
                     currentChildren.push(folder); // Add new folder to the current level
                 }
 
-                currentChildren = folder.children; // Move into the folder for the next level
+                // Move into the folder for the next level
+                // Since `FolderItem` has a `children` property, we can safely assign it here.
+                currentChildren = folder.children as FolderItem[];
             });
 
-            const fileName = parts[parts.length - 1];
+            const fileName = parts[parts.length - 1]; // Get the file name from the path
 
             // Create a new FileItem with the fileName and full filePath
-            const newFileItem = new FileItem(fileName, filePath, fileItem.changeType, fileItem.url, fileItem.originalObjectId, fileItem.repoName);
+            const newFileItem = new FileItem(
+                fileName,
+                filePath,
+                fileItem.changeType,
+                fileItem.url,
+                fileItem.originalObjectId,
+                fileItem.repoName
+            );
 
-            // Add the file to the last folder's children
-            currentChildren.push(newFileItem);
+            // Add the file to the last folder's children (which contains only FolderItem or FileItem)
+            currentChildren.push(newFileItem as unknown as FolderItem); // Type assertion for this mixed array
         });
 
         return rootFolders;
