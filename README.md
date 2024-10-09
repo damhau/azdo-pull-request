@@ -8,6 +8,7 @@ The Azure DevOps Pull Request Review extension for Visual Studio Code enables us
 ## Features
 
 - **List Pull Requests:** View all pull requests across repositories within a specified Azure DevOps project.
+- **View Pull Request Content:** View file that were added, edited, deleted in the Pull request.
 - **Approve Pull Request:** Approve pull requests directly from the VS Code interface.
 - **Reject Pull Request:** Reject pull requests with a single command.
 - **Create New Pull Request:** Create new pull requests by selecting the repository and source branch.
@@ -45,8 +46,7 @@ The extension will store your PAT securely using VS Code's Secret Storage.
 
 ### View the content of the Pull Request
 
-1. Select a pull request and click on the file/view (the 1st) button to show the commit and file that were added/changed in the pull request.
-2. The extension will add you as a reviewer and register your vote accordingly.
+1. Select a pull request and click on the file/view to open the file or a diff.
 
 ### Approve or Reject Pull Request
 
