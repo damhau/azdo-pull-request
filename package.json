@@ -80,14 +80,13 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "azureDevopsPullRequest.openFileContent",
+        "title": "Open File Content in Webview"
+      },
+      {
         "command": "azureDevopsPullRequest.addCommentToPullRequest",
         "title": "Add Comment to Pull Request",
         "icon": "$(comment)"
-      },
-      {
-        "command": "azureDevopsPullRequest.viewPullRequestDetails",
-        "title": "View Pull Request Details",
-        "icon": "$(list-flat)"
       },
       {
         "command": "azureDevopsPullRequest.configure",
@@ -114,11 +113,6 @@
         {
           "command": "azureDevopsPullRequest.createPullRequest",
           "when": "view == pullRequestExplorer && viewItem == repositoryItem",
-          "group": "inline@1"
-        },
-        {
-          "command": "azureDevopsPullRequest.viewPullRequestDetails",
-          "when": "view == pullRequestExplorer && viewItem == pullRequestItem",
           "group": "inline@1"
         },
         {
@@ -153,7 +147,6 @@
         }
       ],
       "view/title": [
-
         {
           "command": "azureDevopsPullRequest.refreshPullRequests",
           "when": "view == pullRequestExplorer",
@@ -225,6 +218,7 @@
   "dependencies": {
     "axios": "^1.7.7",
     "axios-retry": "^4.5.0",
+    "diff2html": "^3.4.48",
     "nodejs-base64-converter": "^1.0.5"
   }
 }

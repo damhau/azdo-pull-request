@@ -28,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!);
-	const pullRequestProvider = new PullRequestProvider(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!, configurationService);
+	const pullRequestProvider = new PullRequestProvider(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!, configurationService, pullRequestService);
 
     const projectService = new ProjectService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion);
     const projectProvider = new ProjectProvider(secretManager, projectService, configurationService);
@@ -76,9 +76,13 @@ export async function activate(context: vscode.ExtensionContext) {
 			await pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),
-
-
-
+		vscode.commands.registerCommand('azureDevopsPullRequest.openFileContent', (fileName: string, fileUrl: string, originalObjectId: string, repoName: string, changeType: string ) => {
+			if (changeType === 'edit') {
+				pullRequestService.openFileDiffInNativeDiffEditor(fileName, configurationService.getSelectedProjectFromGlobalState()!, repoName, originalObjectId , fileUrl);
+			}else if (changeType === 'add'){
+				pullRequestService.openFileInNativeDiffEditor(fileName, fileUrl);
+			}
+		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.refreshPullRequests', () => {
 			pullRequestProvider.refresh(); // Calls the refresh method in the data provider
 		}),
@@ -92,9 +96,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.addCommentToPullRequest', (prItem) => {
 			pullRequestService.openCommentWebview(prItem, configurationService.getSelectedProjectFromGlobalState()!);
-		}),
-		vscode.commands.registerCommand('azureDevopsPullRequest.viewPullRequestDetails', async (prItem) => {
-			await pullRequestService.openPullRequestDiffView(prItem, configurationService.getSelectedProjectFromGlobalState()!);
 		}),
         vscode.commands.registerCommand('azureDevopsPullRequest.selectProject', async (projectId: string) => {
             await configurationService.updateSelectedProjectInGlobalState(projectId);

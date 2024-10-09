@@ -2,11 +2,28 @@ import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
 import * as vscode from 'vscode';
 
+
 axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
 });
 
+// Implementing TextDocumentContentProvider to serve virtual content
+class DiffContentProvider implements vscode.TextDocumentContentProvider {
+    private contents = new Map<string, string>();
+
+    // Set the content for a specific URI
+    setContent(uri: vscode.Uri, content: string) {
+        this.contents.set(uri.toString(), content);
+    }
+
+    // Provide content when VS Code tries to resolve the content of a URI
+    provideTextDocumentContent(uri: vscode.Uri): string | undefined {
+        return this.contents.get(uri.toString());
+    }
+}
+
 export class PullRequestService {
+    private contentProvider: DiffContentProvider;
     private azureDevOpsOrgUrl: string;
     private userAgent: string;
     private azureDevOpsApiVersion: string;
@@ -14,11 +31,16 @@ export class PullRequestService {
 
     private repository: any;
 
+
+
     constructor(orgUrl: string, userAgent: string, apiVersion: string, pat: string) {
         this.azureDevOpsOrgUrl = orgUrl;
         this.userAgent = userAgent;
         this.azureDevOpsApiVersion = apiVersion;
         this.azureDevOpsPat = pat;
+        this.contentProvider = new DiffContentProvider();
+        vscode.workspace.registerTextDocumentContentProvider('diff', this.contentProvider);
+
     }
 
     async abandonPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
@@ -73,7 +95,7 @@ export class PullRequestService {
 
     async openCreatePullRequestForm(azureSelectedDevOpsProject: string, repositoryId?: string): Promise<boolean> {
         if (repositoryId === undefined){
-            this.repository = await vscode.window.showQuickPick(this.getRepositories(azureSelectedDevOpsProject), {
+            this.repository = await vscode.window.showQuickPick(this.getSortedRepositories(azureSelectedDevOpsProject), {
                 placeHolder: 'Select the repository for the pull request'
             });
 
@@ -118,7 +140,10 @@ export class PullRequestService {
         const description = await vscode.window.showInputBox({
             prompt: 'Enter the description for the pull request (optional)'
         });
-
+        if (!description) {
+            vscode.window.showErrorMessage('Description is required to create a pull request.');
+            return false;
+        }
 
         const configureAutoComplete = await vscode.window.showQuickPick(['Yes', 'No'], {
             placeHolder: 'Do you want to enable auto complete on the pull request?'
@@ -129,6 +154,11 @@ export class PullRequestService {
             autoComplete = true;
         } else {
             autoComplete = false;
+        }
+
+        if (!autoComplete) {
+            vscode.window.showErrorMessage('AutoComplete is required to create a pull request.');
+            return false;
         }
 
         await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject, autoComplete);
@@ -171,7 +201,7 @@ export class PullRequestService {
                 }
             );
             const autoCompleteSetBy = await this.getLoggedInUserId();
-            console.log('Auto-complete set by:', autoCompleteSetBy);
+
             await this.enableAutoComplete(response.data.pullRequestId, repository, azureSelectedDevOpsProject, autoCompleteSetBy);
 
             vscode.window.withProgress(
@@ -212,7 +242,7 @@ export class PullRequestService {
                 "id": autoCompleteSetBy // "c2a1adea-d7bc-4365-a58d-db431cecfcdc" // User ID that sets the auto-complete
             }
         };
-        console.debug('Auto-complete payload:', payload);
+
         try {
             const response = await axios.patch(url, payload, {
                 headers: {
@@ -221,7 +251,7 @@ export class PullRequestService {
                     'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
                 }
             });
-            console.log('Auto-complete enabled for the PR:', response.data);
+
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -247,11 +277,7 @@ export class PullRequestService {
         }
     }
 
-
-
-
-
-    async getRepositories(azureSelectedDevOpsProject: string): Promise<string[]> {
+    async getSortedRepositories(azureSelectedDevOpsProject: string): Promise<string[]> {
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
@@ -278,7 +304,9 @@ export class PullRequestService {
         }
     }
 
-    async getRepositoriesAll(azureSelectedDevOpsProject: string): Promise<string[]> {
+
+
+    async getRepositories(azureSelectedDevOpsProject: string): Promise<any[]> {
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
@@ -291,7 +319,10 @@ export class PullRequestService {
                     }
                 }
             );
-            return response.data; // Return repository IDs
+
+            // return response.data.value.map((repo: any) => repo.name); // Return repository IDs
+            return response.data.value;
+
             // } catch (error) {
             //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
             //     return [];
@@ -426,63 +457,8 @@ export class PullRequestService {
         }
     }
 
-    async addCommentToPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
-        const pullRequestId = prItem.prId;
-        const repoName = prItem.repoName;
 
-        // Prompt the user to enter a comment
-        const comment = await vscode.window.showInputBox({
-            prompt: 'Enter your comment',
-            placeHolder: 'Add a comment to the pull request',
-            ignoreFocusOut: true
-        });
-
-        if (!comment) {
-            vscode.window.showErrorMessage('Comment cannot be empty.');
-            return;
-        }
-
-        try {
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: "Adding Comment to Pull Request",
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ message: `Adding comment to PR #${pullRequestId}` });
-
-                // Construct the URL for adding a comment
-                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
-
-                // Prepare the comment thread object
-                const commentThread = {
-                    comments: [
-                        {
-                            parentCommentId: 0, // Set to 0 for a new comment thread
-                            content: comment,
-                            commentType: 1 // 1 for a regular comment, 2 for code-related
-                        }
-                    ],
-                    status: 1 // 1 for active, 2 for resolved, etc.
-                };
-
-                // Send the request to add the comment
-                const response = await axios.post(url, commentThread, {
-                    headers: {
-                        'User-Agent': this.userAgent,
-                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
-                    }
-                });
-
-                progress.report({ message: `Comment added successfully to PR #${pullRequestId}` });
-            });
-
-        } catch (error: unknown) {
-            return this.handleError(error);
-        }
-    }
-
-
-    async addCommentToPullRequest2(prItem: any, comment: string, azureSelectedDevOpsProject: string) {
+    async addCommentToPullRequest(prItem: any, comment: string, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -558,7 +534,7 @@ export class PullRequestService {
         );
 
         // Set the HTML content of the webview panel, passing the threads as a parameter
-        panel.webview.html = this.getWebviewContent(sortedthreads);
+        panel.webview.html = await this.getCommentWebviewContent(sortedthreads);
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
@@ -566,7 +542,7 @@ export class PullRequestService {
                 if (message.command === 'submit') {
                     const comment = message.text;
                     if (comment) {
-                        await this.addCommentToPullRequest2(prItem, comment, azureSelectedDevOpsProject);
+                        await this.addCommentToPullRequest(prItem, comment, azureSelectedDevOpsProject);
                         panel.dispose(); // Close the panel after adding the comment
                     } else {
                         vscode.window.showErrorMessage('Comment cannot be empty.');
@@ -602,7 +578,53 @@ export class PullRequestService {
         }
     }
 
-    getWebviewContent(threads: any[]): string {
+    async openFileDiffInNativeDiffEditor(fileName: string, project: string, repositoryId: string, originalObjectId: string, fileUrl: string): Promise<void> {
+        try {
+
+            const originalFileContent = await this.fetchOriginalFileContent(project, repositoryId, originalObjectId);
+            // Step 2: Fetch the new file content from the URL
+            const newFileContent = await this.fetchFileContent(fileUrl);
+
+            // Step 3: Create URIs for the original and modified content using the "diff" scheme
+            const originalUri = vscode.Uri.parse(`diff:/${fileName}?original`);
+            const modifiedUri = vscode.Uri.parse(`diff:/${fileName}?modified`);
+
+            // Step 4: Set the content for the URIs in the content provider
+            this.contentProvider.setContent(originalUri, originalFileContent);
+            this.contentProvider.setContent(modifiedUri, newFileContent);
+
+            // Step 5: Use the native vscode.diff command to open the diff editor
+            await vscode.commands.executeCommand(
+                'vscode.diff',
+                originalUri, // URI for the original content
+                modifiedUri, // URI for the modified content
+                `Diff: ${fileName}` // Title of the diff editor
+            );
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file diff: ${error}`);
+        }
+    }
+
+    async openFileInNativeDiffEditor(fileName: string, fileUrl: string): Promise<void> {
+        try {
+            // Fetch the file content (for added files, this is the only content)
+            const fileContent = await this.fetchFileContent(fileUrl);
+
+            // Create a URI with a custom scheme to represent the in-memory file
+            const fileUri = vscode.Uri.parse(`diff:/${fileName}`);
+
+            // Set the content in the content provider
+            this.contentProvider.setContent(fileUri, fileContent);
+
+            // Open the file using vscode.workspace.openTextDocument and show it in the editor
+            const document = await vscode.workspace.openTextDocument(fileUri);
+            await vscode.window.showTextDocument(document);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+        }
+    }
+
+    async getCommentWebviewContent(threads: any[]): Promise<string> {
         const threadsHtml = threads.map(thread => {
             // Sort comments by publishedDate in descending order (newest first)
             const sortedComments = thread.comments.sort((a: any, b: any) => new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime());
@@ -685,9 +707,8 @@ export class PullRequestService {
     }
 
 
-    async getPullRequestCommits(prItem: any, azureSelectedDevOpsProject: string): Promise<any[]> {
-        const pullRequestId = prItem.prId;
-        const repoName = prItem.repoName;
+    async getPullRequestCommits(azureSelectedDevOpsProject: string, repoName: string, pullRequestId: number): Promise<any[]> {
+
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
@@ -704,280 +725,24 @@ export class PullRequestService {
         }
     }
 
-    async getCommitChanges(repoName: string, commitId: string, azureSelectedDevOpsProject: string): Promise<any[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/commits/${commitId}/changes?api-version=${this.azureDevOpsApiVersion}`;
+    async getPullRequests(azureSelectedDevOpsProject: string, repoName: string): Promise<any[]> {
+
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
                 headers: {
                     'User-Agent': this.userAgent,
                     'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+
+
                 }
             });
 
-            return response.data.changes || [];
+            return response.data.value || [];
         } catch (error: unknown) {
             return this.handleError(error);
         }
-    }
-
-    // async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
-
-    //     // Fetch all commits for the pull request
-    //     const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
-    //     let aggregatedChanges: any[] = [];
-
-    //     // For each commit, fetch the changes and aggregate them
-    //     for (const commit of commits) {
-    //         const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
-    //         aggregatedChanges.push(...commitChanges.map(change => ({
-    //             ...change,
-    //             commitId: commit.commitId // Add commit ID to each change
-    //         })));
-    //     }
-
-    //     // Group changes by commitId
-    //     const groupedChanges = aggregatedChanges.reduce((acc, change) => {
-    //         if (!acc[change.commitId]) {
-    //             acc[change.commitId] = [];
-    //         }
-    //         acc[change.commitId].push(change);
-    //         return acc;
-    //     }, {});
-
-    //     // Fetch content for each file change
-    //     const changesWithContent = await Promise.all(
-    //         Object.keys(groupedChanges).map(async commitId => {
-    //             const changesForCommit = groupedChanges[commitId];
-    //             const changesWithContentForCommit = await Promise.all(
-    //                 changesForCommit
-    //                 .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
-    //                 .map(async (change: {
-    //                     changeType: string; item: { url: string; path: any; };
-    //                     }) => {
-    //                     if (change.changeType === 'delete') {
-    //                         return {
-    //                             ...change
-    //                         };
-    //                     }else{
-    //                         try {
-    //                             const fileContent = await this.fetchFileContent(change.item.url);
-    //                             return {
-    //                                 ...change,
-    //                                 content: fileContent // Add the fetched content to the change object
-    //                             };
-    //                         } catch (error) {
-    //                             console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
-    //                             return null;
-    //                         }
-    //                     }
-    //                 })
-    //             );
-
-    //             return {
-    //                 commitId,
-    //                 changes: changesWithContentForCommit.filter(change => change !== null)
-    //             };
-    //         })
-    //     );
-
-    //     // Create and show a new webview panel
-    //     const panel = vscode.window.createWebviewPanel(
-    //         'pullRequestDiff', // Identifies the type of the webview. Used internally
-    //         `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
-    //         vscode.ViewColumn.One, // Editor column to show the new webview panel in
-    //         {
-    //             enableScripts: true // Enable javascript in the webview
-    //         }
-    //     );
-
-    //     // Generate the HTML content with file contents grouped by commitId
-    //     panel.webview.html = this.getDiffWebviewContent(changesWithContent);
-    // }
-
-    // async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
-
-    //     // Fetch all commits for the pull request
-    //     const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
-    //     let aggregatedChanges: any[] = [];
-
-    //     // For each commit, fetch the changes and aggregate them
-    //     for (const commit of commits) {
-    //         const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
-    //         aggregatedChanges.push(...commitChanges.map(change => ({
-    //             ...change,
-    //             commitId: commit.commitId // Add commit ID to each change
-    //         })));
-    //     }
-
-    //     // Group changes by commitId
-    //     const groupedChanges = aggregatedChanges.reduce((acc, change) => {
-    //         if (!acc[change.commitId]) {
-    //             acc[change.commitId] = [];
-    //         }
-    //         acc[change.commitId].push(change);
-    //         return acc;
-    //     }, {});
-
-    //     // Use vscode.window.withProgress for fetching content
-    //     const changesWithContent = await vscode.window.withProgress({
-    //         location: vscode.ProgressLocation.Notification,
-    //         title: "Fetching File Contents",
-    //         cancellable: false
-    //     }, async (progress) => {
-
-    //         progress.report({ increment: 0, message: "Starting to fetch file contents..." });
-
-    //         let totalFiles = Object.keys(groupedChanges).reduce((acc, commitId) => {
-    //             return acc + groupedChanges[commitId].length;
-    //         }, 0);
-    //         let processedFiles = 0;
-
-    //         const changesWithContentForCommits = await Promise.all(
-    //             Object.keys(groupedChanges).map(async commitId => {
-    //                 const changesForCommit = groupedChanges[commitId];
-    //                 const changesWithContentForCommit = await Promise.all(
-    //                     changesForCommit
-    //                         .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
-    //                         .map(async (change: {
-    //                             changeType: string; item: { url: string; path: any; };
-    //                         }) => {
-    //                             if (change.changeType === 'delete') {
-    //                                 processedFiles++;
-    //                                 progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Processed ${processedFiles} of ${totalFiles} files` });
-    //                                 return {
-    //                                     ...change
-    //                                 };
-    //                             } else {
-    //                                 try {
-    //                                     const fileContent = await this.fetchFileContent(change.item.url);
-    //                                     processedFiles++;
-    //                                     progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Fetched ${processedFiles} of ${totalFiles} files` });
-    //                                     return {
-    //                                         ...change,
-    //                                         content: fileContent // Add the fetched content to the change object
-    //                                     };
-    //                                 } catch (error) {
-    //                                     console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
-    //                                     return null;
-    //                                 }
-    //                             }
-    //                         })
-    //                 );
-    //                 return {
-    //                     commitId,
-    //                     changes: changesWithContentForCommit.filter(change => change !== null)
-    //                 };
-    //             })
-    //         );
-
-    //         return changesWithContentForCommits;
-    //     });
-
-    //     // Create and show a new webview panel
-    //     const panel = vscode.window.createWebviewPanel(
-    //         'pullRequestDiff', // Identifies the type of the webview. Used internally
-    //         `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
-    //         vscode.ViewColumn.One, // Editor column to show the new webview panel in
-    //         {
-    //             enableScripts: true // Enable javascript in the webview
-    //         }
-    //     );
-
-    //     // Generate the HTML content with file contents grouped by commitId
-    //     panel.webview.html = this.getDiffWebviewContent(changesWithContent);
-    // }
-
-    async openPullRequestDiffView(prItem: any, azureSelectedDevOpsProject: string) {
-        // Fetch all commits for the pull request
-        const commits = await this.getPullRequestCommits(prItem, azureSelectedDevOpsProject);
-        let aggregatedChanges: any[] = [];
-
-        // For each commit, fetch the changes and aggregate them
-        for (const commit of commits) {
-            const commitChanges = await this.getCommitChanges(prItem.repoName, commit.commitId, azureSelectedDevOpsProject);
-            aggregatedChanges.push(...commitChanges.map(change => ({
-                ...change,
-                commitId: commit.commitId // Add commit ID to each change
-            })));
-        }
-
-        // Group changes by commitId
-        const groupedChanges = aggregatedChanges.reduce((acc, change) => {
-            if (!acc[change.commitId]) {
-                acc[change.commitId] = [];
-            }
-            acc[change.commitId].push(change);
-            return acc;
-        }, {});
-
-        // Use vscode.window.withProgress for fetching content
-        const changesWithContent = await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: "Fetching File Contents",
-            cancellable: false
-        }, async (progress) => {
-            let processedFiles = 0;
-            let totalFiles = Object.keys(groupedChanges).reduce((acc, commitId) => {
-                return acc + groupedChanges[commitId].length;
-            }, 0);
-
-            // Ensure we see the initial progress report
-            progress.report({ increment: 0, message: "Starting to fetch file contents..." });
-
-            const changesWithContentForCommits = await Promise.all(
-                Object.keys(groupedChanges).map(async commitId => {
-                    const changesForCommit = groupedChanges[commitId];
-                    const changesWithContentForCommit = await Promise.all(
-                        changesForCommit
-                            .filter((change: { item: { isFolder: any; }; }) => !change.item.isFolder)
-                            .map(async (change: {
-                                changeType: string; item: { url: string; path: any; };
-                            }) => {
-                                if (change.changeType === 'delete') {
-                                    processedFiles++;
-                                    progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Processed ${processedFiles} of ${totalFiles} files` });
-                                    return {
-                                        ...change
-                                    };
-                                } else {
-                                    try {
-                                        const fileContent = await this.fetchFileContent(change.item.url);
-                                        processedFiles++;
-                                        progress.report({ increment: (processedFiles / totalFiles) * 100, message: `Fetched ${processedFiles} of ${totalFiles} files` });
-                                        return {
-                                            ...change,
-                                            content: fileContent // Add the fetched content to the change object
-                                        };
-                                    } catch (error) {
-                                        console.error(`Failed to fetch content for ${change.item.path}: ${error}`);
-                                        return null;
-                                    }
-                                }
-                            })
-                    );
-                    return {
-                        commitId,
-                        changes: changesWithContentForCommit.filter(change => change !== null)
-                    };
-                })
-            );
-
-            return changesWithContentForCommits;
-        });
-
-        // Create and show a new webview panel
-        const panel = vscode.window.createWebviewPanel(
-            'pullRequestDiff', // Identifies the type of the webview. Used internally
-            `Pull Request #${prItem.prId} Changes`, // Title of the panel displayed to the user
-            vscode.ViewColumn.One, // Editor column to show the new webview panel in
-            {
-                enableScripts: true // Enable javascript in the webview
-            }
-        );
-
-        // Generate the HTML content with file contents grouped by commitId
-        panel.webview.html = this.getDiffWebviewContent(changesWithContent);
     }
 
     async fetchFileContent(fileUrl: string): Promise<any> {
@@ -992,83 +757,40 @@ export class PullRequestService {
         return response.data || 'No content available';
     }
 
+    async fetchOriginalFileContent(project: string, repositoryId: string, originalObjectId: string): Promise<string> {
+        const url = `${this.azureDevOpsOrgUrl}/${project}/_apis/git/repositories/${repositoryId}/blobs/${originalObjectId}?api-version=${this.azureDevOpsApiVersion}`;
 
-    getDiffWebviewContent(groupedChanges: any[]): string {
-
-        const diffHtml = groupedChanges.map(commitGroup => {
-
-            const commitId = commitGroup.commitId;
-            const changes = commitGroup.changes.map((change: { item: { path: any; }; changeType: any; content: string; }) => {
-                const fullPath = change.item.path; // Full path including subfolders
-                //const fileName = path.basename(fullPath); // Extract only the file name
-                const changeType = change.changeType;
-                const content = change.content || 'No content available'; // Use fetched content
-                // Wrap content in <pre> and <code> tags for code formatting
-                return `
-                    <div class="file-diff">
-                        <h4>${fullPath} (${changeType})</h4>
-                        <div class="file-path">${fullPath}</div> <!-- Display the full path for context -->
-                        <pre><code class="file-content">${content}</code></pre>
-                    </div>
-                `;
-            }).join('');
-
-            // Return the section for each commit
-            return `
-                <section class="commit-section">
-                    <h3>Commit ID: ${commitId}</h3>
-                    ${changes}
-                </section>
-            `;
-        }).join('');
-
-        return `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Pull Request Changes</title>
-            <style>
-                body { font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px; }
-                .commit-section { margin-bottom: 30px; }
-                .file-diff { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-                .file-path { font-size: 0.85em; color: #888; margin-bottom: 10px; }
-                .file-content { padding: 10px; border-top: 1px solid #e0e0e0; white-space: pre-wrap; overflow-x: auto; }
-                .add { background-color: #e6ffed; }
-                .del { background-color: #ffeef0; }
-                h3 { margin-top: 0; }
-                h4 { margin-top: 0; }
-                /* Optional Syntax Highlighting Styles */
-                pre, code {
-                    background-color: #f5f5f5;
-                    border-radius: 4px;
-                    font-size: 14px;
-                    font-family: "Courier New", Courier, monospace;
-                }
-                pre {
-                    padding: 15px;
-                    overflow: auto;
-                }
-            </style>
-            <!-- Include highlight.js CSS and JS -->
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
-            <script>
-                document.addEventListener("DOMContentLoaded", (event) => {
-                    document.querySelectorAll("pre code").forEach((block) => {
-                        hljs.highlightElement(block);
-                    });
-                });
-            </script>
-        </head>
-        <body>
-            <h2>Files Changed</h2>
-            ${diffHtml}
-        </body>
-        </html>`;
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`,
+                    'Accept': 'text/plain', // To fetch file content as plain text
+                },
+            });
+            return response.data || 'No original content available';
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to fetch original file content: ${error}`);
+            return 'Error fetching original file content';
+        }
     }
 
+    async getCommitChanges(project: string, repoName: string, commitId: string): Promise<any[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${project}/_apis/git/repositories/${repoName}/commits/${commitId}/changes?api-version=${this.azureDevOpsApiVersion}`;
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            return response.data.changes || [];
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
 
     async getDefaultBranch(repositoryId: string, azureSelectedDevOpsProject: string): Promise<string | null> {
         const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}?api-version=${this.azureDevOpsApiVersion}`;
