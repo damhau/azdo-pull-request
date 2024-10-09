@@ -1,3 +1,11 @@
+# 1.0.0 (2024-10-09)
+
+
+### Features
+
+* new feature to open pr content in native diff in vs code ([98d6a8d](https://github.com/damhau/azdo-pull-request/commit/98d6a8d7245d6b94c3e809e84a6847ccd8b770a6))
+* new feature to use the native file viewer and diff viewer for pull request content ([b37b5d3](https://github.com/damhau/azdo-pull-request/commit/b37b5d3a468cad6f9c94c53120efbd6d438a2ccd))
+
 ## 0.0.1
 
 - Initial release
