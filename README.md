@@ -63,6 +63,8 @@ The extension will store your PAT securely using VS Code's Secret Storage.
 1. Select a pull request and click on the comment icon.
 2. A webview will open, displaying existing comments.
 3. Enter your comment and click `Submit`.
+4. You can also reply to a comment an resolve a comment
+5. You can also add a comment to a specific file
 
 ### Open Pull Request in Browser
 
