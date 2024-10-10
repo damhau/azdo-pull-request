@@ -28,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!);
-	const pullRequestProvider = new PullRequestProvider(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!, configurationService, pullRequestService);
+	const pullRequestProvider = new PullRequestProvider(configurationService, pullRequestService);
 
     const projectService = new ProjectService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion);
     const projectProvider = new ProjectProvider(secretManager, projectService, configurationService);
@@ -68,12 +68,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequest', async (repoItem) => {
 			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!, repoItem.repoId);
-			await pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
+			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequestNewRepo', async () => {
 			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!);
-			await pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
+			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.openFileContent', (fileName: string, fileUrl: string, originalObjectId: string, repoName: string, changeType: string ) => {
@@ -83,12 +83,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				pullRequestService.openFileInNativeDiffEditor(fileName, fileUrl);
 			}
 		}),
+		vscode.commands.registerCommand('azureDevopsPullRequest.addCommentToFile', (fileItem) => {
+			pullRequestService.addCommentToFile(fileItem.filePath, fileItem.repoName, fileItem.pullRequestId, configurationService.getSelectedProjectFromGlobalState()!);
+		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.refreshPullRequests', () => {
 			pullRequestProvider.refresh(); // Calls the refresh method in the data provider
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.abandonPullRequest', async (prItem) => {
 			await pullRequestService.abandonPullRequest(prItem, configurationService.getSelectedProjectFromGlobalState()!);
-			await pullRequestProvider.refresh();
+			pullRequestProvider.refresh();
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.openPullRequestInBrowser', (prItem) => {
 			const prUrl = `${azureDevOpsOrgUrl}/${configurationService.getSelectedProjectFromGlobalState()!}/_git/${prItem.repoName}/pullrequest/${prItem.prId}`;

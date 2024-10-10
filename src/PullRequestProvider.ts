@@ -10,16 +10,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
     private repositories: RepositoryItem[] = [];
     private loading: boolean = false; // State to show if loading
 
-    private azureDevOpsOrgUrl: string;
-    private userAgent: string;
-    private azureDevOpsApiVersion: string;
-    private azureDevOpsPat: string;
-
-    constructor(orgUrl: string, userAgent: string, apiVersion: string, pat: string, private configurationService: ConfigurationService, private pullRequestService: PullRequestService) {
-        this.azureDevOpsOrgUrl = orgUrl;
-        this.userAgent = userAgent;
-        this.azureDevOpsApiVersion = apiVersion;
-        this.azureDevOpsPat = pat;
+    constructor(private configurationService: ConfigurationService, private pullRequestService: PullRequestService) {
         this.refresh();
     }
 
@@ -57,7 +48,22 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
             const fileMap = await this.generatePullRequestItems(azureSelectedDevOpsProject!, element);
 
             // Build the file tree based on the file map
-            const fileTree = this.buildFileTree(fileMap);
+            let fileTree = this.buildFileTree(fileMap);
+
+            fileTree = fileTree.sort((a, b) => {
+                // Ensure folders come first
+                if (a instanceof FolderItem && !(b instanceof FolderItem)) {
+                    return -1; // Folders come first
+                } else if (!(a instanceof FolderItem) && b instanceof FolderItem) {
+                    return 1; // Files come after folders
+                } else {
+                    // Check if labels are undefined and handle them appropriately
+                    const labelA = a.label ?? ''; // Use the nullish coalescing operator to handle undefined labels
+                    const labelB = b.label ?? '';
+                    return (typeof labelA === 'string' ? labelA : labelA.label).localeCompare(typeof labelB === 'string' ? labelB : labelB.label); // Sort alphabetically within the same type
+                }
+            });
+
             return Promise.resolve(fileTree); // Return the file tree (folders/files)
         } else if (element instanceof FolderItem) {
             // Folder level: return its children
@@ -67,31 +73,47 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
             return Promise.resolve([]);
         }
     }
-
-
     private async generatePullRequestItems(project: string, prItem: PullRequestItem): Promise<Map<string, FileItem>> {
-
         try {
-            const commits = await this.pullRequestService.getPullRequestCommits(project, prItem.repoName , prItem.prId);
-            const fileMap: Map<string, FileItem> = new Map(); // Store files by file path to prevent duplicates
+            const commits = await this.pullRequestService.getPullRequestCommits(project, prItem.repoName, prItem.prId);
+            const fileMap: Map<string, FileItem> = new Map(); // Store files by a unique key (file path + commitId) to prevent duplicates
 
-            for (const commit of commits) {
+            // Fetch commit changes in parallel using Promise.all
+            const commitChangesPromises = commits.map(async (commit: any) => {
                 const commitId = commit.commitId;
-                const commitChanges = await this.pullRequestService.getCommitChanges(project, prItem.repoName, commitId);
+                return { commitId, changes: await this.pullRequestService.getCommitChanges(project, prItem.repoName, commitId) };
+            });
 
-                // Filter changes by type: 'add', 'edit', or 'delete'
-                const filteredChanges = commitChanges
-                .filter((change: any) => !change.item.isFolder)
-                .filter((change: any) =>
-                    change.changeType === 'add' || change.changeType === 'edit' || change.changeType === 'delete'
-                );
+            // Wait for all the commit changes to be fetched in parallel
+            const allCommitChanges = await Promise.all(commitChangesPromises);
 
-                filteredChanges.forEach(change => {
-                    if (!fileMap.has(change.item.path)) { // Avoid duplicates
-                        fileMap.set(change.item.path, new FileItem(change.item.path, change.item.path, change.changeType, change.item.url,  change.item.originalObjectId,  prItem.repoName));
+            // Flatten the array of commit changes and process the results
+            allCommitChanges.flat().forEach(({ commitId, changes }) => {
+                changes.forEach((change: any) => {
+                    // Filter out folder changes and process only 'add', 'edit', or 'delete' changes
+                    //if (!change.item.isFolder && (change.changeType === 'add' || change.changeType === 'edit' || change.changeType === 'delete')) {
+                    if (!change.item.isFolder) {
+                        // Generate a unique key by combining file path and commit ID to prevent duplicates
+                        //const uniqueKey = `${change.item.path}-${commitId}`;
+                        if (!fileMap.has(change.item.path)) {
+                        //if (!fileMap.has(uniqueKey)) {
+                            fileMap.set(
+                                change.item.path,
+                                new FileItem(
+                                    change.item.path,
+                                    change.item.path,
+                                    change.changeType,
+                                    change.item.url,
+                                    change.item.originalObjectId,
+                                    prItem.repoName,
+                                    commitId, // Pass commitId to FileItem
+                                    prItem.prId // Pass prId to FileItem,
+                                )
+                            );
+                        }
                     }
                 });
-            }
+            });
 
             return fileMap;
         } catch (error) {
@@ -160,7 +182,8 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
         return [];
     }
 
-    buildFileTree(fileMap: Map<string, FileItem>): FolderItem[] {
+
+    private buildFileTree(fileMap: Map<string, FileItem>): FolderItem[] {
         const rootFolders: FolderItem[] = []; // Root-level folders
 
         fileMap.forEach((fileItem, filePath) => {
@@ -190,15 +213,20 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
                 fileItem.changeType,
                 fileItem.url,
                 fileItem.originalObjectId,
-                fileItem.repoName
+                fileItem.repoName,
+                fileItem.commitId,
+                fileItem.pullRequestId // Added commitId
             );
 
-            // Add the file to the last folder's children (which contains only FolderItem or FileItem)
+            // Add the file to the last folder's children
             currentChildren.push(newFileItem as unknown as FolderItem); // Type assertion for this mixed array
         });
 
         return rootFolders;
     }
+
+
+
 
 
 }
@@ -261,11 +289,14 @@ class FileItem extends vscode.TreeItem {
         public readonly changeType: string,
         public readonly url: string,
         public readonly originalObjectId: string,
-        public readonly repoName: string
+        public readonly repoName: string,
+        public readonly commitId: string, // Add commitId property
+        public readonly pullRequestId: number
     ) {
         super(fileName, vscode.TreeItemCollapsibleState.None);
         this.contextValue = 'fileItem';
         this.iconPath = this.getIconForChangeType(changeType);
+        this.tooltip = `Filename: ${this.fileName}\nFile path: ${this.filePath}\nChange Type: ${this.changeType}\nCommit Id: ${this.commitId}\nPull Request Id: ${this.pullRequestId}`;
         this.command = {
             command: 'azureDevopsPullRequest.openFileContent',
             title: 'Open File',

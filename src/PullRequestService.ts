@@ -140,10 +140,7 @@ export class PullRequestService {
         const description = await vscode.window.showInputBox({
             prompt: 'Enter the description for the pull request (optional)'
         });
-        if (!description) {
-            vscode.window.showErrorMessage('Description is required to create a pull request.');
-            return false;
-        }
+
 
         const configureAutoComplete = await vscode.window.showQuickPick(['Yes', 'No'], {
             placeHolder: 'Do you want to enable auto complete on the pull request?'
@@ -154,11 +151,6 @@ export class PullRequestService {
             autoComplete = true;
         } else {
             autoComplete = false;
-        }
-
-        if (!autoComplete) {
-            vscode.window.showErrorMessage('AutoComplete is required to create a pull request.');
-            return false;
         }
 
         await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject, autoComplete);
@@ -200,25 +192,30 @@ export class PullRequestService {
                     }
                 }
             );
-            const autoCompleteSetBy = await this.getLoggedInUserId();
+            if (enableAutoComplete) {
 
-            await this.enableAutoComplete(response.data.pullRequestId, repository, azureSelectedDevOpsProject, autoCompleteSetBy);
+                const autoCompleteSetBy = await this.getLoggedInUserId();
 
-            vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Enabling Auto Complete: ${response.data.pullRequestId}`,
-                    cancellable: false,
-                },
-                async (progress, token) => {
-                    for (let i = 0; i < 2; i++) {
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        setTimeout(() => {
-                            progress.report({ increment: i * 10, message: '' });
-                        }, 10000);
+                await this.enableAutoComplete(response.data.pullRequestId, repository, azureSelectedDevOpsProject, autoCompleteSetBy);
+
+                vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: `Enabling Auto Complete: ${response.data.pullRequestId}`,
+                        cancellable: false,
+                    },
+                    async (progress, token) => {
+                        for (let i = 0; i < 2; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            setTimeout(() => {
+                                progress.report({ increment: i * 10, message: '' });
+                            }, 10000);
+                        }
                     }
-                }
-            );
+                );
+
+            }
+
             const prItem = { "repoName": repository , "prId": response.data.pullRequestId};
             await vscode.commands.executeCommand("azureDevopsPullRequest.copyPullRequestUrl", prItem);
 
@@ -502,14 +499,107 @@ export class PullRequestService {
         }
     }
 
+    // Function to handle adding a comment to the file
+    async addCommentToFile(filePath: string, repoName: string, pullRequestId: string, project: string) {
+        // Display WebView to add the comment
+        const panel = vscode.window.createWebviewPanel(
+            'addCommentToFile',
+            `Add Comment to ${filePath}`,
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true
+            }
+        );
+
+        // Set the WebView content for adding the comment
+        panel.webview.html = this.getAddCommentWebviewContent(filePath);
+
+        // Handle comment submission
+        panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.command === 'submit') {
+                const comment = message.text;
+                if (comment) {
+                    // Logic to add the comment to the file in Azure DevOps
+                    await this.submitCommentToFile(filePath, repoName, pullRequestId, comment, project);
+                    vscode.window.showInformationMessage(`Comment added to ${filePath}`);
+                    panel.dispose(); // Close the WebView after submitting the comment
+                } else {
+                    vscode.window.showErrorMessage('Comment cannot be empty.');
+                }
+            }
+        });
+    }
+
+    getAddCommentWebviewContent(filePath: string): string {
+        return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Add Comment</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                textarea { width: 100%; height: 100px; padding: 10px; margin-top: 10px; box-sizing: border-box; }
+                button { padding: 10px 20px; margin-top: 10px; background-color: #007acc; color: white; border: none; cursor: pointer; }
+            </style>
+        </head>
+        <body>
+            <h2>Add Comment to ${filePath}</h2>
+            <textarea id="comment" placeholder="Enter your comment"></textarea>
+            <button onclick="submitComment()">Submit</button>
+            <script>
+                const vscode = acquireVsCodeApi();
+                function submitComment() {
+                    const comment = document.getElementById('comment').value;
+                    vscode.postMessage({
+                        command: 'submit',
+                        text: comment
+                    });
+                }
+            </script>
+        </body>
+        </html>`;
+    }
+
+    async submitCommentToFile(filePath: string, repoName: string, pullRequestId: string, comment: string, azureSelectedDevOpsProject: string) {
+        // Implement logic to add a comment to Azure DevOps for the specified file and commit
+        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
+        const commentThread = {
+            comments: [
+                {
+                    parentCommentId: 0,
+                    content: comment,
+                    commentType: 2 // 1 for a regular comment
+                }
+            ],
+            threadContext: {
+                filePath: filePath
+            },
+            status: 1 // 1 for active
+        };
+        try {
+            const response = await axios.post(url, commentThread, {
+                headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+            return response.data;
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to add comment to ${filePath}: ${error.message}`);
+        }
+    }
+
+
     async openCommentWebview(prItem: any, azureSelectedDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
         // Fetch existing comment threads for the pull request
         const threads = await this.getCommentThreads(prItem, azureSelectedDevOpsProject);
-
-        const sortedthreads = threads.sort((a: any, b: any) => {
+        // Sort threads by the latest comment date
+        const sortedThreads = threads.sort((a: any, b: any) => {
             const latestCommentA = a.comments.reduce((latest: any, comment: any) =>
                 new Date(comment.publishedDate).getTime() > new Date(latest.publishedDate).getTime() ? comment : latest,
                 a.comments[0]
@@ -522,7 +612,6 @@ export class PullRequestService {
 
             return new Date(latestCommentB.publishedDate).getTime() - new Date(latestCommentA.publishedDate).getTime();
         });
-
         // Create and show a new webview panel
         const panel = vscode.window.createWebviewPanel(
             'addComment', // Identifies the type of the webview. Used internally
@@ -534,7 +623,7 @@ export class PullRequestService {
         );
 
         // Set the HTML content of the webview panel, passing the threads as a parameter
-        panel.webview.html = await this.getCommentWebviewContent(sortedthreads);
+        panel.webview.html = await this.getCommentWebviewContent(sortedThreads);
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
@@ -557,6 +646,7 @@ export class PullRequestService {
 
 
 
+
     // Method to fetch comment threads from the Azure DevOps API
     async getCommentThreads(prItem: any, azureSelectedDevOpsProject: string): Promise<any[]> {
         const pullRequestId = prItem.prId;
@@ -570,7 +660,6 @@ export class PullRequestService {
                     'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
                 }
             });
-
             return response.data.value || [];
         } catch (error: unknown) {
             vscode.window.showErrorMessage(`Failed to fetch comment threads: ${error}`);
@@ -625,10 +714,16 @@ export class PullRequestService {
     }
 
     async getCommentWebviewContent(threads: any[]): Promise<string> {
+
         const threadsHtml = threads.map(thread => {
+            // Extract file path from threadContext if it exists
+
+            const filePath = thread.threadContext?.filePath ? thread.threadContext.filePath : null;
+
             // Sort comments by publishedDate in descending order (newest first)
             const sortedComments = thread.comments.sort((a: any, b: any) => new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime());
 
+            // Format the comments
             const comments = sortedComments.map((comment: any) => {
                 // Generate avatar URL based on the author's initials
                 const initials = comment.author.displayName.split(' ').map((name: string) => name.charAt(0)).join('');
@@ -648,8 +743,12 @@ export class PullRequestService {
                 `;
             }).join('');
 
+            // Include file path (if exists) above the comments
+            const filePathHtml = filePath ? `<div class="file-path">Related to file: <strong>${filePath}</strong></div>` : '';
+
             return `
                 <div class="thread">
+                    ${filePathHtml} <!-- Display file path if present -->
                     ${comments}
                 </div>
             `;
@@ -666,6 +765,7 @@ export class PullRequestService {
                 body { font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px; }
                 .threads { margin-bottom: 20px; }
                 .thread { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+                .file-path { font-size: 0.9em; margin-bottom: 10px; color: #888; }
                 .comment { border-top: 1px solid #e0e0e0; padding: 10px 0; }
                 .comment:first-child { border-top: none; }
                 .comment-header { display: flex; align-items: center; margin-bottom: 5px; }
@@ -705,6 +805,7 @@ export class PullRequestService {
         </body>
         </html>`;
     }
+
 
 
     async getPullRequestCommits(azureSelectedDevOpsProject: string, repoName: string, pullRequestId: number): Promise<any[]> {
