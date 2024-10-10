@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/damhau/azdo-pull-request/compare/v1.0.0...v1.1.0) (2024-10-10)
+
+
+### Features
+
+* add comment to a file and some cleanup ([7224b53](https://github.com/damhau/azdo-pull-request/commit/7224b53a22616d88fda613b476d67260e4502211))
+
 # 1.0.0 (2024-10-09)
 
 
