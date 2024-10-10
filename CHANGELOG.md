@@ -1,6 +1,19 @@
 # [1.1.0](https://github.com/damhau/azdo-pull-request/compare/v1.0.0...v1.1.0) (2024-10-10)
 
 
+### Bug Fixes
+
+* few code cleanup ([391fddf](https://github.com/damhau/azdo-pull-request/commit/391fddf9bd0cea2f91ee000cd1d8335e7b90c390))
+
+
+### Features
+
+* add comment to a file and some cleanup ([7224b53](https://github.com/damhau/azdo-pull-request/commit/7224b53a22616d88fda613b476d67260e4502211))
+* update comment feature ([17e5bec](https://github.com/damhau/azdo-pull-request/commit/17e5bec9846cb1e73ea31bc9105fec009efa7d05))
+
+# [1.1.0](https://github.com/damhau/azdo-pull-request/compare/v1.0.0...v1.1.0) (2024-10-10)
+
+
 ### Features
 
 * add comment to a file and some cleanup ([7224b53](https://github.com/damhau/azdo-pull-request/commit/7224b53a22616d88fda613b476d67260e4502211))
