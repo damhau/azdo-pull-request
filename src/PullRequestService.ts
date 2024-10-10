@@ -766,7 +766,11 @@ export class PullRequestService {
             });
             return response.data;
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to add comment to ${filePath}: ${error.message}`);
+            if (error instanceof Error) {
+                vscode.window.showErrorMessage(`Failed to add comment to ${filePath}: ${error.message}`);
+            } else {
+                vscode.window.showErrorMessage(`Failed to add comment to ${filePath}: Unknown error`);
+            }
         }
     }
 

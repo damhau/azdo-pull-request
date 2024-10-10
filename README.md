@@ -24,7 +24,7 @@ The Azure DevOps Pull Request Review extension for Visual Studio Code enables us
 
 ## Configuration
 
-During the first startup the extension will prompt you to enter the needed configutaiton but if you want to change it you can follow this procedure.
+During the first startup the extension will prompt you to enter the needed configuration but if you want to change it you can follow this procedure.
 
 Before using the extension, you need to configure it with your Azure DevOps details:
 
