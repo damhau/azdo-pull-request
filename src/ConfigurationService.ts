@@ -17,6 +17,7 @@ export class ConfigurationService {
         return {
             azureDevOpsOrgUrl: config.get<string>('azureDevOpsOrgUrl') || '',
             azureDevOpsApiVersion: config.get<string>('azureDevOpsApiVersion') || '7.1',
+            azureDevOpsTeam: config.get<string>('azureDevOpsTeam') || 'Cloud Native',
             userAgent: config.get<string>('userAgent') || `azure-devops-pull-request-extension/1.0 (${os.platform()}; ${os.release()})`
 
         };

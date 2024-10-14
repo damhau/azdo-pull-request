@@ -19,7 +19,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	// Load configuration
-	const { azureDevOpsOrgUrl, azureDevOpsApiVersion, userAgent } = configurationService.getConfiguration();
+	const { azureDevOpsOrgUrl, azureDevOpsApiVersion, userAgent, azureDevOpsTeam} = configurationService.getConfiguration();
 
 	const pat = await secretManager.getSecret('PAT');
 
@@ -67,12 +67,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequest', async (repoItem) => {
-			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!, repoItem.repoId);
+			const azureDevOpsTeamId = await pullRequestService.getTeamIdFromName(configurationService.getSelectedProjectFromGlobalState()!, azureDevOpsTeam);
+			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!, azureDevOpsTeamId!, repoItem.repoId);
 			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequestNewRepo', async () => {
-			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!);
+			const azureDevOpsTeamId = await pullRequestService.getTeamIdFromName(configurationService.getSelectedProjectFromGlobalState()!, azureDevOpsTeam);
+			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!, azureDevOpsTeamId!);
 			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),

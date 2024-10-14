@@ -6,6 +6,7 @@ axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
 });
 
+
 // Implementing TextDocumentContentProvider to serve virtual content
 class DiffContentProvider implements vscode.TextDocumentContentProvider {
     private contents = new Map<string, string>();
@@ -44,10 +45,10 @@ export class PullRequestService {
 
     //#region Pull request functions
 
-    async abandonPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
+    async abandonPullRequest(prItem: any, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
 
         const confirm = await vscode.window.showWarningMessage(
             `Are you sure you want to abandon this pull request?`,
@@ -94,9 +95,9 @@ export class PullRequestService {
         }
     }
 
-    async openCreatePullRequestForm(azureSelectedDevOpsProject: string, repositoryId?: string): Promise<boolean> {
+    async openCreatePullRequestForm(azureDevOpsProject: string, azureDevOpsTeam: string, repositoryId?: string): Promise<boolean> {
         if (repositoryId === undefined){
-            this.repository = await vscode.window.showQuickPick(this.getSortedRepositories(azureSelectedDevOpsProject), {
+            this.repository = await vscode.window.showQuickPick(this.getSortedRepositories(azureDevOpsProject), {
                 placeHolder: 'Select the repository for the pull request'
             });
 
@@ -112,7 +113,7 @@ export class PullRequestService {
         }
 
 
-        const sourceBranch = await vscode.window.showQuickPick(this.getBranches(this.repository, azureSelectedDevOpsProject), {
+        const sourceBranch = await vscode.window.showQuickPick(this.getBranches(this.repository, azureDevOpsProject), {
             placeHolder: 'Select the source branch for the pull request'
         });
 
@@ -121,7 +122,7 @@ export class PullRequestService {
             return false;
         }
 
-        const targetBranch = await this.getDefaultBranch(this.repository, azureSelectedDevOpsProject); // Fetch the default branch dynamically
+        const targetBranch = await this.getDefaultBranch(this.repository, azureDevOpsProject); // Fetch the default branch dynamically
         if (!targetBranch) {
             vscode.window.showErrorMessage('Could not find the default branch for the repository.');
             return false;
@@ -142,6 +143,26 @@ export class PullRequestService {
             prompt: 'Enter the description for the pull request (optional)'
         });
 
+        const pbiDetails = await this.getPBIDetails(azureDevOpsProject, azureDevOpsTeam);
+
+        pbiDetails.unshift({
+            id: "",
+            fields: { 'System.Title': 'None' },
+            _links: { html: { href: '' } }
+
+        });
+
+        const selectedPBI = await vscode.window.showQuickPick(
+            pbiDetails.map(pbi => ({
+                label: pbi.id.toString(),
+                description: pbi.fields['System.Title'],
+                url: pbi._links.html.href
+            })),
+            {
+                placeHolder: 'Select a PBI to attach to the PR (optional)',
+                canPickMany: false
+            }
+        );
 
         const configureAutoComplete = await vscode.window.showQuickPick(['Yes', 'No'], {
             placeHolder: 'Do you want to enable auto complete on the pull request?'
@@ -153,13 +174,23 @@ export class PullRequestService {
         } else {
             autoComplete = false;
         }
+        if (selectedPBI) {
+            const pbiId = selectedPBI.label;
+            const pbiUrl = selectedPBI.url;
+            await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureDevOpsProject, autoComplete, pbiId, pbiUrl);
+            return true;
+            // Store the PBI ID for linking later
+        }else{
+            await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureDevOpsProject, autoComplete);
+            return true;
+        }
 
-        await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureSelectedDevOpsProject, autoComplete);
-        return true;
+
+
     }
 
-    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string, azureSelectedDevOpsProject: string, enableAutoComplete: boolean) {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repository}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
+    async createPullRequest(repository: string, sourceBranch: string, targetBranch: string, title: string, description: string, azureDevOpsProject: string, enableAutoComplete: boolean, pbiId?: string, pbiUrl?: string) {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repository}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.post(
@@ -168,7 +199,11 @@ export class PullRequestService {
                     sourceRefName: `refs/heads/${sourceBranch}`,
                     targetRefName: `refs/heads/${targetBranch}`,
                     title: title,
-                    description: description
+                    description: description,
+                    workItemRefs: [{
+                        id: pbiId, // ID of the work item to link
+                        url: pbiUrl
+                    }],
                 },
                 {
                     headers: {
@@ -197,7 +232,7 @@ export class PullRequestService {
 
                 const autoCompleteSetBy = await this.getLoggedInUserId();
 
-                await this.enableAutoComplete(response.data.pullRequestId, repository, azureSelectedDevOpsProject, autoCompleteSetBy);
+                await this.enableAutoComplete(response.data.pullRequestId, repository, azureDevOpsProject, autoCompleteSetBy);
 
                 vscode.window.withProgress(
                     {
@@ -225,8 +260,8 @@ export class PullRequestService {
         }
     }
 
-    async enableAutoComplete(pullRequestId: number, repositoryId: string, azureSelectedDevOpsProject: string, autoCompleteSetBy: string) {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
+    async enableAutoComplete(pullRequestId: number, repositoryId: string, azureDevOpsProject: string, autoCompleteSetBy: string) {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}?api-version=${this.azureDevOpsApiVersion}`;
 
         const payload = {
             "completionOptions": {
@@ -255,7 +290,7 @@ export class PullRequestService {
         }
     }
 
-    async approvePullRequest(prItem: any, azureSelectedDevOpsProject: string) {
+    async approvePullRequest(prItem: any, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -280,7 +315,7 @@ export class PullRequestService {
                 );
 
                 const reviewerId = reviewerResponse.data.authenticatedUser.id; // Use your user ID as reviewerId
-                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
 
                 await axios.put(
                     url,
@@ -304,7 +339,7 @@ export class PullRequestService {
         }
     }
 
-    async rejectPullRequest(prItem: any, azureSelectedDevOpsProject: string) {
+    async rejectPullRequest(prItem: any, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -328,7 +363,7 @@ export class PullRequestService {
                 );
 
                 const reviewerId = reviewerResponse.data.authenticatedUser.id; // Use your user ID as reviewerId
-                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=${this.azureDevOpsApiVersion}`;
 
                 await axios.put(
                     url,
@@ -351,7 +386,7 @@ export class PullRequestService {
         }
     }
 
-    async addCommentToPullRequest(prItem: any, comment: string, azureSelectedDevOpsProject: string) {
+    async addCommentToPullRequest(prItem: any, comment: string, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
@@ -363,7 +398,7 @@ export class PullRequestService {
             }, async (progress) => {
                 progress.report({ message: `Adding comment to PR #${pullRequestId}` });
 
-                const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
+                const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
 
                 const commentThread = {
                     comments: [
@@ -395,9 +430,9 @@ export class PullRequestService {
         }
     }
 
-    async getPullRequestCommits(azureSelectedDevOpsProject: string, repoName: string, pullRequestId: number): Promise<any[]> {
+    async getPullRequestCommits(azureDevOpsProject: string, repoName: string, pullRequestId: number): Promise<any[]> {
 
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/commits?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
@@ -413,9 +448,9 @@ export class PullRequestService {
         }
     }
 
-    async getPullRequests(azureSelectedDevOpsProject: string, repoName: string): Promise<any[]> {
+    async getPullRequests(azureDevOpsProject: string, repoName: string): Promise<any[]> {
 
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullrequests?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
@@ -436,8 +471,8 @@ export class PullRequestService {
     //#endregion
 
     //#region Repository functions
-    async getSortedRepositories(azureSelectedDevOpsProject: string): Promise<string[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
+    async getSortedRepositories(azureDevOpsProject: string): Promise<string[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -463,8 +498,8 @@ export class PullRequestService {
         }
     }
 
-    async getRepositories(azureSelectedDevOpsProject: string): Promise<any[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
+    async getRepositories(azureDevOpsProject: string): Promise<any[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -489,8 +524,8 @@ export class PullRequestService {
         }
     }
 
-    async getBranches(repositoryId: string, azureSelectedDevOpsProject: string): Promise<string[]> {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}/refs?filter=heads/&api-version=${this.azureDevOpsApiVersion}`;
+    async getBranches(repositoryId: string, azureDevOpsProject: string): Promise<string[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repositoryId}/refs?filter=heads/&api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(
@@ -512,8 +547,8 @@ export class PullRequestService {
         }
     }
 
-    async getDefaultBranch(repositoryId: string, azureSelectedDevOpsProject: string): Promise<string | null> {
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repositoryId}?api-version=${this.azureDevOpsApiVersion}`;
+    async getDefaultBranch(repositoryId: string, azureDevOpsProject: string): Promise<string | null> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repositoryId}?api-version=${this.azureDevOpsApiVersion}`;
 
         try {
             const response = await axios.get(url, {
@@ -667,11 +702,11 @@ export class PullRequestService {
 
     //#region Comment functions
 
-    async replyToComment(prItem: any, threadId: number, replyText: string, azureSelectedDevOpsProject: string) {
+    async replyToComment(prItem: any, threadId: number, replyText: string, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}/comments?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}/comments?api-version=${this.azureDevOpsApiVersion}`;
 
         const payload = {
             content: replyText,
@@ -693,11 +728,11 @@ export class PullRequestService {
         }
     }
 
-    async resolveComment(prItem: any, threadId: number, azureSelectedDevOpsProject: string) {
+    async resolveComment(prItem: any, threadId: number, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}?api-version=${this.azureDevOpsApiVersion}`;
         const payload = {
             status: 2 // Set the status to 2 for "resolved"
         };
@@ -715,11 +750,11 @@ export class PullRequestService {
         }
     }
 
-    async reactivateComment(prItem: any, threadId: number, azureSelectedDevOpsProject: string) {
+    async reactivateComment(prItem: any, threadId: number, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads/${threadId}?api-version=${this.azureDevOpsApiVersion}`;
 
         const payload = {
             status: 1 // Set the status to 2 for "resolved"
@@ -741,9 +776,9 @@ export class PullRequestService {
 
     }
 
-    async submitCommentToFile(filePath: string, repoName: string, pullRequestId: string, comment: string, azureSelectedDevOpsProject: string) {
+    async submitCommentToFile(filePath: string, repoName: string, pullRequestId: string, comment: string, azureDevOpsProject: string) {
         // Implement logic to add a comment to Azure DevOps for the specified file and commit
-        const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=${this.azureDevOpsApiVersion}`;
         const commentThread = {
             comments: [
                 {
@@ -774,11 +809,11 @@ export class PullRequestService {
         }
     }
 
-    async getCommentThreads(prItem: any, azureSelectedDevOpsProject: string): Promise<any[]> {
+    async getCommentThreads(prItem: any, azureDevOpsProject: string): Promise<any[]> {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
         try {
-            const url = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=7.2-preview.1`;
+            const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/_apis/git/repositories/${repoName}/pullRequests/${pullRequestId}/threads?api-version=7.2-preview.1`;
 
             const response = await axios.get(url, {
                 headers: {
@@ -1006,12 +1041,12 @@ export class PullRequestService {
         </html>`;
     }
 
-    async openCommentWebview(prItem: any, azureSelectedDevOpsProject: string) {
+    async openCommentWebview(prItem: any, azureDevOpsProject: string) {
         const pullRequestId = prItem.prId;
         const repoName = prItem.repoName;
 
         // Fetch existing comment threads for the pull request
-        const threads = await this.getCommentThreads(prItem, azureSelectedDevOpsProject);
+        const threads = await this.getCommentThreads(prItem, azureDevOpsProject);
         // Sort threads by the latest comment date
         const sortedThreads = threads.sort((a: any, b: any) => {
             const latestCommentA = a.comments.reduce((latest: any, comment: any) =>
@@ -1044,8 +1079,8 @@ export class PullRequestService {
                 case 'submit':
                     const comment = message.text;
                     if (comment) {
-                        await this.addCommentToPullRequest(prItem, comment, azureSelectedDevOpsProject);
-                        await this.refreshWebView(panel, prItem, azureSelectedDevOpsProject);
+                        await this.addCommentToPullRequest(prItem, comment, azureDevOpsProject);
+                        await this.refreshWebView(panel, prItem, azureDevOpsProject);
                     } else {
                         vscode.window.showErrorMessage('Comment cannot be empty.');
 
@@ -1055,8 +1090,8 @@ export class PullRequestService {
                 case 'reply':
                     const replyText = message.replyText;
                     if (replyText) {
-                        await this.replyToComment(prItem, message.threadId, replyText, azureSelectedDevOpsProject);
-                        await this.refreshWebView(panel, prItem, azureSelectedDevOpsProject);
+                        await this.replyToComment(prItem, message.threadId, replyText, azureDevOpsProject);
+                        await this.refreshWebView(panel, prItem, azureDevOpsProject);
                     } else {
                         vscode.window.showErrorMessage('Reply cannot be empty.');
 
@@ -1065,26 +1100,26 @@ export class PullRequestService {
 
                 case 'resolve':
 
-                    await this.resolveComment(prItem, message.threadId, azureSelectedDevOpsProject);
-                    await this.refreshWebView(panel, prItem, azureSelectedDevOpsProject);
+                    await this.resolveComment(prItem, message.threadId, azureDevOpsProject);
+                    await this.refreshWebView(panel, prItem, azureDevOpsProject);
                     break;
 
                 case 'reactivate':
 
-                await this.reactivateComment(prItem, message.threadId, azureSelectedDevOpsProject);
-                await this.refreshWebView(panel, prItem, azureSelectedDevOpsProject);
+                await this.reactivateComment(prItem, message.threadId, azureDevOpsProject);
+                await this.refreshWebView(panel, prItem, azureDevOpsProject);
                 break;
             }
         });
     }
 
-    async refreshWebView(panel: vscode.WebviewPanel, prItem: any, azureSelectedDevOpsProject: string) {
-        if (!azureSelectedDevOpsProject) {
+    async refreshWebView(panel: vscode.WebviewPanel, prItem: any, azureDevOpsProject: string) {
+        if (!azureDevOpsProject) {
             vscode.window.showErrorMessage('No project selected.');
             return;
         }
         // Fetch existing comment threads for the pull request
-        const threads = await this.getCommentThreads(prItem, azureSelectedDevOpsProject);
+        const threads = await this.getCommentThreads(prItem, azureDevOpsProject);
         // Sort threads by the latest comment date
         const sortedThreads = threads.sort((a: any, b: any) => {
             const latestCommentA = a.comments.reduce((latest: any, comment: any) =>
@@ -1109,7 +1144,102 @@ export class PullRequestService {
 
     //#endregion
 
+    //#region PBI functions
+
+    async getCurrentSprintPBIs(azureDevOpsProject: string, team: string): Promise<any[]> {
+        const url = `${this.azureDevOpsOrgUrl}/${azureDevOpsProject}/${team}/_apis/work/teamsettings/iterations?$timeframe=current&api-version=${this.azureDevOpsApiVersion}`;
+
+        try {
+            // Fetch the current iteration (sprint)
+            const iterationResponse = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            // Fetch PBIs for the current sprint (using the iteration id)
+            const iterationPath = iterationResponse.data.value[0].path;
+            const pbiUrl = `${this.azureDevOpsOrgUrl}/_apis/wit/wiql?api-version=${this.azureDevOpsApiVersion}`;
+
+            const pbiQuery = {
+                "query": `SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.WorkItemType] = 'Product Backlog Item' AND [System.IterationPath] = '${iterationPath}'`
+            };
+
+            const pbiResponse = await axios.post(pbiUrl, pbiQuery, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            return pbiResponse.data.workItems || [];
+
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+
+    async getPBIDetails(azureSelectedDevOpsProject: string, team: string): Promise<any[]> {
+        // Step 1: Get the current sprint PBIs
+        const sprintPBIs = await this.getCurrentSprintPBIs(azureSelectedDevOpsProject, team);
+
+        // Step 2: Prepare to fetch detailed information for each PBI in parallel
+        const pbiDetailPromises = sprintPBIs.map(async (pbi: any) => {
+            const pbiId = pbi.id;
+            const pbiDetailsUrl = `${this.azureDevOpsOrgUrl}/${azureSelectedDevOpsProject}/_apis/wit/workitems/${pbiId}?api-version=${this.azureDevOpsApiVersion}`;
+
+            // Fetch PBI details
+            try {
+                const response = await axios.get(pbiDetailsUrl, {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    }
+                });
+                return response.data; // Return the detailed information for this PBI
+            } catch (error) {
+                this.handleError(error);
+                return null; // Return null if there's an error, but continue with the rest
+            }
+        });
+
+        // Step 3: Use Promise.all to fetch details for all PBIs concurrently
+        const pbiDetails = await Promise.all(pbiDetailPromises);
+
+        // Filter out any null values (in case any fetches failed)
+        return pbiDetails.filter(pbi => pbi !== null);
+    }
+
+
+    //#endregion
+
     //#region Utility functions
+
+
+    async getTeamIdFromName(azureDevOpsProject: string, teamName: string): Promise<string | null> {
+        const url = `${this.azureDevOpsOrgUrl}/_apis/projects/${azureDevOpsProject}/teams/${teamName}?api-version=7.1-preview.1`;
+
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                }
+            });
+
+            const teamId = response.data.id; // The team ID is in the 'id' field
+            return teamId;
+
+        } catch (error) {
+            this.handleError(error);
+            return null;
+        }
+    }
+
+
     makeUrlsClickable(text: string): string {
         // Regular expression to find URLs in the text
         const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
@@ -1140,6 +1270,8 @@ export class PullRequestService {
     }
     //#endregion
 
+    //#region Error handling
+
     private async handleError(error: unknown) {
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError;
@@ -1151,6 +1283,7 @@ export class PullRequestService {
             }
 
             else {
+                console.debug(error);
                 await vscode.window.showErrorMessage(`Error: ${error.response?.data?.message || error.message}`);
             }
         } else {
@@ -1158,6 +1291,9 @@ export class PullRequestService {
         }
         return [];
     }
+
+    //#endregion
 }
+
 
 

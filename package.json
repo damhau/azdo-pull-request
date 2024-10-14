@@ -202,6 +202,10 @@
           "type": "string",
           "default": "",
           "description": "Http User agent for the query to Azure Devops."
+        },
+        "azureDevopsPullRequest.azureDevOpsTeam": {
+          "type": "string",
+          "description": "Name of Azure Devops Teams for Sprint and PBI."
         }
       }
     }
