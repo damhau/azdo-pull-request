@@ -96,7 +96,7 @@ export class PullRequestService {
     }
 
     async openCreatePullRequestForm(azureDevOpsProject: string, azureDevOpsTeam: string, repositoryId?: string): Promise<boolean> {
-        if (repositoryId === undefined){
+        if (repositoryId === undefined) {
             this.repository = await vscode.window.showQuickPick(this.getSortedRepositories(azureDevOpsProject), {
                 placeHolder: 'Select the repository for the pull request'
             });
@@ -107,7 +107,7 @@ export class PullRequestService {
             }
 
 
-        }else{
+        } else {
 
             this.repository = repositoryId;
         }
@@ -180,7 +180,7 @@ export class PullRequestService {
             await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureDevOpsProject, autoComplete, pbiId, pbiUrl);
             return true;
             // Store the PBI ID for linking later
-        }else{
+        } else {
             await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureDevOpsProject, autoComplete);
             return true;
         }
@@ -252,7 +252,7 @@ export class PullRequestService {
 
             }
 
-            const prItem = { "repoName": repository , "prId": response.data.pullRequestId};
+            const prItem = { "repoName": repository, "prId": response.data.pullRequestId };
             await vscode.commands.executeCommand("azureDevopsPullRequest.copyPullRequestUrl", prItem);
 
         } catch (error: unknown) {
@@ -487,8 +487,8 @@ export class PullRequestService {
 
             // return response.data.value.map((repo: any) => repo.name); // Return repository IDs
             return response.data.value
-            .map((repo: any) => repo.name) // Extract the repository names
-            .sort((a: string, b: string) => a.localeCompare(b)); // Sort alphabetically
+                .map((repo: any) => repo.name) // Extract the repository names
+                .sort((a: string, b: string) => a.localeCompare(b)); // Sort alphabetically
             // } catch (error) {
             //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
             //     return [];
@@ -613,7 +613,7 @@ export class PullRequestService {
                 if (comment) {
                     // Logic to add the comment to the file in Azure DevOps
                     await this.submitCommentToFile(filePath, repoName, pullRequestId, comment, project);
-                    const prItem = { "repoName": repoName , "prId": pullRequestId};
+                    const prItem = { "repoName": repoName, "prId": pullRequestId };
                     await this.openCommentWebview(prItem, project);
 
 
@@ -795,8 +795,8 @@ export class PullRequestService {
         try {
             const response = await axios.post(url, commentThread, {
                 headers: {
-                        'User-Agent': this.userAgent,
-                        'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
+                    'User-Agent': this.userAgent,
+                    'Authorization': `Basic ${Buffer.from(':' + this.azureDevOpsPat).toString('base64')}`
                 }
             });
             return response.data;
@@ -913,7 +913,7 @@ export class PullRequestService {
                     <button class="reactivate-button" data-thread-id="${threadId}">Reactivate</button>
                      </div>`;
 
-            }else{
+            } else {
                 replySection = `<!-- Add Reply and Resolve buttons at the end of the thread -->
                     <div class="reply-section">
                     <textarea class="reply-input" placeholder="Write a reply..."></textarea>
@@ -1106,9 +1106,9 @@ export class PullRequestService {
 
                 case 'reactivate':
 
-                await this.reactivateComment(prItem, message.threadId, azureDevOpsProject);
-                await this.refreshWebView(panel, prItem, azureDevOpsProject);
-                break;
+                    await this.reactivateComment(prItem, message.threadId, azureDevOpsProject);
+                    await this.refreshWebView(panel, prItem, azureDevOpsProject);
+                    break;
             }
         });
     }
@@ -1277,6 +1277,15 @@ export class PullRequestService {
             const axiosError = error as AxiosError;
             if (axiosError.response && axiosError.response.status === 401) {
                 await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
+                const selection = await vscode.window.showErrorMessage(
+                    'Authentication failed: Invalid or expired Personal Access Token (PAT). Would you like to update your PAT?',
+                    'Update PAT'
+                );
+
+                if (selection === 'Update PAT') {
+                    // Trigger the update PAT command
+                    vscode.commands.executeCommand('azureDevopsPullRequest.updatePat');
+                }
             } else if (axiosError.response && axiosError.response.status === 409) {
 
                 await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
