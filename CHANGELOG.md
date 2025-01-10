@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/damhau/azdo-pull-request/compare/v1.1.0...v1.1.1) (2024-10-14)
+
+
+### Bug Fixes
+
+* add workitem in new PR and some cleanup ([f35e8a5](https://github.com/damhau/azdo-pull-request/commit/f35e8a511528b1608eef0d97fad79e1e34a4f838))
+
 # [1.1.0](https://github.com/damhau/azdo-pull-request/compare/v1.0.0...v1.1.0) (2024-10-10)
 
 
