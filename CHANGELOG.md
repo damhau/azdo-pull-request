@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/damhau/azdo-pull-request/compare/v1.1.2...v1.1.3) (2025-01-31)
+
+
+### Bug Fixes
+
+* pr for repo without team ([b1074f2](https://github.com/damhau/azdo-pull-request/commit/b1074f2afdafc43d9e365f267f405656e7367e05))
+
 ## [1.1.2](https://github.com/damhau/azdo-pull-request/compare/v1.1.1...v1.1.2) (2025-01-10)
 
 
