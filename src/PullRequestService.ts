@@ -143,14 +143,24 @@ export class PullRequestService {
             prompt: 'Enter the description for the pull request (optional)'
         });
 
-        const pbiDetails = await this.getPBIDetails(azureDevOpsProject, azureDevOpsTeam);
+        let pbiDetails: any[] = [];
 
-        pbiDetails.unshift({
-            id: "",
-            fields: { 'System.Title': 'None' },
-            _links: { html: { href: '' } }
+        if (azureDevOpsTeam === null) {
+            pbiDetails.unshift({
+                id: "",
+                fields: { 'System.Title': 'None' },
+                _links: { html: { href: '' } }
 
-        });
+            });
+
+        } else {
+
+            pbiDetails = await this.getPBIDetails(azureDevOpsProject, azureDevOpsTeam);
+        }
+
+
+
+
 
         const selectedPBI = await vscode.window.showQuickPick(
             pbiDetails.map(pbi => ({
@@ -1234,7 +1244,7 @@ export class PullRequestService {
             return teamId;
 
         } catch (error) {
-            this.handleError(error);
+            // this.handleError(error);
             return null;
         }
     }
@@ -1273,6 +1283,10 @@ export class PullRequestService {
     //#region Error handling
 
     private async handleError(error: unknown) {
+
+        const stackTrace = new Error().stack;
+        const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
+
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError;
             if (axiosError.response && axiosError.response.status === 401) {
@@ -1293,7 +1307,7 @@ export class PullRequestService {
 
             else {
                 console.debug(error);
-                await vscode.window.showErrorMessage(`Error: ${error.response?.data?.message || error.message}`);
+                await vscode.window.showErrorMessage(`Error in ${callerFunction}: ${error.response?.data?.message || error.message}`);
             }
         } else {
             await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
