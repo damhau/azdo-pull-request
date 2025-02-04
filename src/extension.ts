@@ -6,6 +6,19 @@ import { ConfigurationService } from './ConfigurationService';
 import { ProjectProvider } from './ProjectProvider';
 import { ProjectService } from './ProjectService';
 
+
+
+import { extensions, Extension } from 'vscode';
+
+interface GitExtension {
+	getAPI(version: number): BuiltInGitApi;
+}
+
+interface BuiltInGitApi {
+	repositories: any[];
+}
+
+
 export async function activate(context: vscode.ExtensionContext) {
 
 	const secretManager = new SecretManager(context);
@@ -19,7 +32,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	// Load configuration
-	const { azureDevOpsOrgUrl, azureDevOpsApiVersion, userAgent, azureDevOpsTeam} = configurationService.getConfiguration();
+	const { azureDevOpsOrgUrl, azureDevOpsApiVersion, userAgent, azureDevOpsTeam } = configurationService.getConfiguration();
 
 	const pat = await secretManager.getSecret('PAT');
 
@@ -30,30 +43,47 @@ export async function activate(context: vscode.ExtensionContext) {
 	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!);
 	const pullRequestProvider = new PullRequestProvider(configurationService, pullRequestService);
 
-    const projectService = new ProjectService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion);
-    const projectProvider = new ProjectProvider(secretManager, projectService, configurationService);
+	const projectService = new ProjectService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion);
+	const projectProvider = new ProjectProvider(secretManager, projectService, configurationService);
 
 
-    // Create the TreeView for the sidebar
+	// Create the TreeView for the sidebar
 	vscode.window.registerTreeDataProvider('pullRequestExplorer', pullRequestProvider);
 
-    vscode.window.createTreeView('pullRequestExplorer', {
-        treeDataProvider: pullRequestProvider,
-        showCollapseAll: true, // Optional: Shows a "collapse all" button
-    });
+	vscode.window.createTreeView('pullRequestExplorer', {
+		treeDataProvider: pullRequestProvider,
+		showCollapseAll: true, // Optional: Shows a "collapse all" button
+	});
 
 	vscode.window.registerTreeDataProvider('projectExplorerPR', projectProvider);
 
-    vscode.window.createTreeView('projectExplorerPR', {
-        treeDataProvider: projectProvider,
-        showCollapseAll: true
-    });
+	vscode.window.createTreeView('projectExplorerPR', {
+		treeDataProvider: projectProvider,
+		showCollapseAll: true
+	});
 
 	await projectProvider.refresh();
 
+
+	const gitApi = await getBuiltInGitApi();
+
+	if (!gitApi) {
+		vscode.window.showErrorMessage("Git API is unavailable.");
+		return;
+	}
+
+	if (gitApi.repositories.length === 0) {
+		vscode.window.showErrorMessage("No Git repository found in this workspace.");
+		return;
+	}
+
+	// Start monitoring Git commits
+	pullRequestService.monitorGitCommits(gitApi, configurationService);
+
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('azureDevopsPullRequest.configure', () => configurationService.updateConfiguration()),
-        vscode.commands.registerCommand('azureDevopsPullRequest.updatePat', () => configurationService.updatePat()),
+		vscode.commands.registerCommand('azureDevopsPullRequest.updatePat', () => configurationService.updatePat()),
 		vscode.commands.registerCommand('azureDevopsPullRequest.listPullRequests', () => {
 			pullRequestProvider.refresh();
 		}),
@@ -78,10 +108,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
 		}),
-		vscode.commands.registerCommand('azureDevopsPullRequest.openFileContent', (fileName: string, fileUrl: string, originalObjectId: string, repoName: string, changeType: string ) => {
+		vscode.commands.registerCommand('azureDevopsPullRequest.openFileContent', (fileName: string, fileUrl: string, originalObjectId: string, repoName: string, changeType: string) => {
 			if (changeType === 'edit') {
-				pullRequestService.openFileDiffInNativeDiffEditor(fileName, configurationService.getSelectedProjectFromGlobalState()!, repoName, originalObjectId , fileUrl);
-			}else if (changeType === 'add'){
+				pullRequestService.openFileDiffInNativeDiffEditor(fileName, configurationService.getSelectedProjectFromGlobalState()!, repoName, originalObjectId, fileUrl);
+			} else if (changeType === 'add') {
 				pullRequestService.openFileInNativeDiffEditor(fileName, fileUrl);
 			}
 		}),
@@ -102,14 +132,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('azureDevopsPullRequest.addCommentToPullRequest', (prItem) => {
 			pullRequestService.openCommentWebview(prItem, configurationService.getSelectedProjectFromGlobalState()!);
 		}),
-        vscode.commands.registerCommand('azureDevopsPullRequest.selectProject', async (projectId: string) => {
-            await configurationService.updateSelectedProjectInGlobalState(projectId);
-            pullRequestProvider.refresh();
-        }),
-        vscode.commands.registerCommand('azureDevopsPullRequest.selectProjectsToShow', async () => {
-            await projectProvider.promptForProjectSelection();
-            pullRequestProvider.refresh();
-        }),
+		vscode.commands.registerCommand('azureDevopsPullRequest.selectProject', async (projectId: string) => {
+			await configurationService.updateSelectedProjectInGlobalState(projectId);
+			pullRequestProvider.refresh();
+		}),
+		vscode.commands.registerCommand('azureDevopsPullRequest.selectProjectsToShow', async () => {
+			await projectProvider.promptForProjectSelection();
+			pullRequestProvider.refresh();
+		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.copyPullRequestUrl', async (prItem) => {
 			const azureDevOpsOrgUrl = configurationService.getConfiguration().azureDevOpsOrgUrl;
 			const project = configurationService.getSelectedProjectFromGlobalState();
@@ -130,5 +160,45 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 
-
 export function deactivate() { }
+
+async function getBuiltInGitApi(): Promise<BuiltInGitApi | undefined> {
+	try {
+		const extension = extensions.getExtension('vscode.git') as Extension<GitExtension>;
+
+		if (!extension) {
+			vscode.window.showErrorMessage("Git extension 'vscode.git' not found.");
+			return undefined;
+		}
+
+		if (!extension.isActive) {
+			console.debug("[DEBUG] Activating Git extension...");
+			await extension.activate();
+		}
+
+		const gitApi = extension.exports.getAPI(1);
+		if (!gitApi.repositories.length) {
+			console.debug("[DEBUG] No Git repository found. Waiting...");
+			await waitForRepository(gitApi);
+		}
+
+		return gitApi;
+	} catch (error) {
+		vscode.window.showErrorMessage(`Failed to activate Git API: ${error}`);
+	}
+
+	return undefined;
+}
+
+// Helper function to wait for a repository to be available
+async function waitForRepository(gitApi: BuiltInGitApi): Promise<void> {
+	return new Promise((resolve) => {
+		const interval = setInterval(() => {
+			if (gitApi.repositories.length > 0) {
+				console.debug("[DEBUG] Git repository detected:", gitApi.repositories[0].rootUri.fsPath);
+				clearInterval(interval);
+				resolve();
+			}
+		}, 1000);
+	});
+}

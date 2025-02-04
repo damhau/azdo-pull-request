@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
+import { privateEncrypt } from 'crypto';
 import * as vscode from 'vscode';
 
 axiosRetry(axios, {
@@ -95,7 +96,7 @@ export class PullRequestService {
         }
     }
 
-    async openCreatePullRequestForm(azureDevOpsProject: string, azureDevOpsTeam: string, repositoryId?: string): Promise<boolean> {
+    async openCreatePullRequestForm(azureDevOpsProject: string, azureDevOpsTeam: string, repositoryId?: string, branchName?: string): Promise<boolean> {
         if (repositoryId === undefined) {
             this.repository = await vscode.window.showQuickPick(this.getSortedRepositories(azureDevOpsProject), {
                 placeHolder: 'Select the repository for the pull request'
@@ -111,11 +112,15 @@ export class PullRequestService {
 
             this.repository = repositoryId;
         }
-
-
-        const sourceBranch = await vscode.window.showQuickPick(this.getBranches(this.repository, azureDevOpsProject), {
-            placeHolder: 'Select the source branch for the pull request'
-        });
+        let sourceBranch: any;
+        if (branchName === undefined) {
+            sourceBranch = await vscode.window.showQuickPick(this.getBranches(this.repository, azureDevOpsProject), {
+                placeHolder: 'Select the source branch for the pull request'
+            });
+        }
+        else {
+            sourceBranch = branchName;
+        }
 
         if (!sourceBranch) {
             vscode.window.showErrorMessage('Source branch is required to create a pull request.');
@@ -156,6 +161,12 @@ export class PullRequestService {
         } else {
 
             pbiDetails = await this.getPBIDetails(azureDevOpsProject, azureDevOpsTeam);
+            pbiDetails.unshift({
+                id: "",
+                fields: { 'System.Title': 'None' },
+                _links: { html: { href: '' } }
+
+            });
         }
 
 
@@ -1316,6 +1327,110 @@ export class PullRequestService {
     }
 
     //#endregion
+
+    public async monitorGitCommits(gitApi: any, configurationService: any) {
+        gitApi.repositories.forEach(async (repo: any) => {
+            const repoPath = repo.rootUri.fsPath;
+            const remoteUrl = this.getRemoteUrl(repo);
+
+            if (remoteUrl) {
+                console.debug(`[DEBUG] Remote URL detected: ${remoteUrl}`);
+                const detectedProject = this.extractAzureDevOpsProject(remoteUrl);
+
+                if (detectedProject) {
+                    console.debug(`[DEBUG] Detected Azure DevOps project: ${detectedProject}`);
+                    await configurationService.updateSelectedProjectInGlobalState(detectedProject);
+                }
+            }
+
+            repo.onDidCommit(async () => {
+                console.debug("[DEBUG] Commit detected!");
+
+                const branchName = repo.state.HEAD?.name;
+                if (!branchName) {
+                    console.debug("[DEBUG] No active branch found.");
+                    return;
+                }
+
+                console.debug(`[DEBUG] Commit detected in repo: ${repoPath}`);
+
+                const isNewBranch = await this.isBranchNew(repo, branchName);
+                console.debug(`[DEBUG] Is new branch? ${isNewBranch}`);
+
+                if (isNewBranch) {
+                    console.debug(`Would you like to create a Pull Request for branch ${branchName}`);
+                    const choice = await vscode.window.showInformationMessage(
+                        `Would you like to create a Pull Request for branch ${branchName} ?`,
+                        'Yes',
+                        'No'
+                    );
+
+                    if (choice === 'Yes') {
+                        console.debug("[DEBUG] User accepted PR creation.");
+
+                        // Fetch the selected Azure DevOps project
+                        const selectedProject = configurationService.getSelectedProjectFromGlobalState();
+                        if (!selectedProject) {
+                            vscode.window.showErrorMessage("No project selected for PR creation.");
+                            return;
+                        }
+
+                        // Find the corresponding Azure DevOps repository
+                        const repositories = await this.getRepositories(selectedProject);
+                        const matchingRepo = repositories.find((r: any) => repoPath.includes(r.name));
+
+                        if (!matchingRepo) {
+                            vscode.window.showErrorMessage(`No matching Azure DevOps repository found for '${repoPath}'.`);
+                            return;
+                        }
+
+                        console.debug(`[DEBUG] Matched Azure DevOps repo: ${matchingRepo.name}`);
+
+                        // Call existing function for PR creation
+                        const azureDevOpsTeamId = await this.getTeamIdFromName(selectedProject, configurationService.getConfiguration().azureDevOpsTeam);
+                        await this.openCreatePullRequestForm(selectedProject, azureDevOpsTeamId!, matchingRepo.id, branchName);
+
+                        // Refresh pull request view
+                        vscode.commands.executeCommand('azureDevopsPullRequest.refreshPullRequests');
+                    }
+                }
+            });
+        });
+
+        console.debug("[DEBUG] Git commit monitoring initialized.");
+    }
+
+
+    private async isBranchNew(repo: any, branchName: string): Promise<boolean> {
+        const mainBranches = ['main', 'master', 'develop'];
+        return !mainBranches.includes(branchName);
+    }
+
+
+    private extractAzureDevOpsProject(remoteUrl: string): string | null {
+        if (!remoteUrl.startsWith(this.azureDevOpsOrgUrl)) {
+            vscode.window.showErrorMessage(`Invalid Azure DevOps remote URL: ${remoteUrl}`);
+            return null;
+        }
+        const projectPath = remoteUrl.replace(this.azureDevOpsOrgUrl, "");
+        const parts = projectPath.split('/');
+        if (parts.length >= 2) {
+            return parts[1]; // The project name is the second part
+        }
+
+        vscode.window.showErrorMessage(`Failed to detect Azure DevOps project from remote URL: ${remoteUrl}`);
+        return null;
+    }
+
+
+    private getRemoteUrl(repo: any): string | null {
+        if (repo.state.remotes.length > 0 && repo.state.remotes[0].fetchUrl) {
+            return repo.state.remotes[0].fetchUrl;
+        }
+        return null;
+    }
+
+
 }
 
 
