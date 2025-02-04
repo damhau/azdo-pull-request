@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/damhau/azdo-pull-request/compare/v1.1.3...v1.2.0) (2025-02-04)
+
+
+### Features
+
+* add automatic PR creation ([a8fe4ee](https://github.com/damhau/azdo-pull-request/commit/a8fe4ee42a5d803c70c42c3c9238c8a405dc491c))
+
 ## [1.1.3](https://github.com/damhau/azdo-pull-request/compare/v1.1.2...v1.1.3) (2025-01-31)
 
 
