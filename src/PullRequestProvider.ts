@@ -96,7 +96,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
                         // Generate a unique key by combining file path and commit ID to prevent duplicates
                         //const uniqueKey = `${change.item.path}-${commitId}`;
                         if (!fileMap.has(change.item.path)) {
-                        //if (!fileMap.has(uniqueKey)) {
+                            //if (!fileMap.has(uniqueKey)) {
                             fileMap.set(
                                 change.item.path,
                                 new FileItem(
@@ -147,7 +147,7 @@ export class PullRequestProvider implements vscode.TreeDataProvider<vscode.TreeI
 
                     // Only return RepositoryItem if it has pull requests
                     if (pullRequests.length > 0) {
-                        return new RepositoryItem(repo.name, repo.id,  pullRequests);
+                        return new RepositoryItem(repo.name, repo.id, pullRequests);
                     }
                 } catch (error: unknown) {
                     return this.handleError(error);
@@ -317,3 +317,4 @@ class FileItem extends vscode.TreeItem {
         }
     }
 }
+

@@ -37,6 +37,8 @@ export class ProjectService {
 
     // Error handler for Axios requests
     private async handleError(error: unknown) {
+        const stackTrace = new Error().stack;
+        const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
 
         if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError;
@@ -54,7 +56,7 @@ export class ProjectService {
 
 
             } else {
-                await vscode.window.showErrorMessage(`Error: ${axiosError.message}`);
+                await vscode.window.showErrorMessage(`Error in ${callerFunction}: ${axiosError.message}`);
             }
         } else {
             await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);

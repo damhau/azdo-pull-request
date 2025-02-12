@@ -208,6 +208,11 @@
         "azureDevopsPullRequest.azureDevOpsTeam": {
           "type": "string",
           "description": "Name of Azure Devops Teams for Sprint and PBI."
+        },
+        "azureDevopsPullRequest.enableDebugLogs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable debug logs for troubleshooting."
         }
       }
     }

@@ -1,7 +1,11 @@
 import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
-import { privateEncrypt } from 'crypto';
 import * as vscode from 'vscode';
+import { Logger } from './LoggingService';
+
+const log_debug = Logger.debug;
+const log_info = Logger.info;
+
 
 axiosRetry(axios, {
     retries: 3, // Number of retries (Defaults to 3)
@@ -169,10 +173,6 @@ export class PullRequestService {
             });
         }
 
-
-
-
-
         const selectedPBI = await vscode.window.showQuickPick(
             pbiDetails.map(pbi => ({
                 label: pbi.id.toString(),
@@ -205,8 +205,6 @@ export class PullRequestService {
             await this.createPullRequest(this.repository, sourceBranch, targetBranch, title, description || '', azureDevOpsProject, autoComplete);
             return true;
         }
-
-
 
     }
 
@@ -510,10 +508,7 @@ export class PullRequestService {
             return response.data.value
                 .map((repo: any) => repo.name) // Extract the repository names
                 .sort((a: string, b: string) => a.localeCompare(b)); // Sort alphabetically
-            // } catch (error) {
-            //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
-            //     return [];
-            // }
+
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -536,10 +531,7 @@ export class PullRequestService {
             // return response.data.value.map((repo: any) => repo.name); // Return repository IDs
             return response.data.value;
 
-            // } catch (error) {
-            //     vscode.window.showErrorMessage(`Failed to fetch repo: ${error.message}`);
-            //     return [];
-            // }
+
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -559,10 +551,7 @@ export class PullRequestService {
                 }
             );
             return response.data.value.map((ref: any) => ref.name.replace('refs/heads/', ''));
-            // } catch (error) {
-            //     vscode.window.showErrorMessage(`Failed to fetch branches: ${error.message}`);
-            //     return [];
-            // }
+
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -1291,74 +1280,44 @@ export class PullRequestService {
     }
     //#endregion
 
-    //#region Error handling
-
-    private async handleError(error: unknown) {
-
-        const stackTrace = new Error().stack;
-        const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
-
-        if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError;
-            if (axiosError.response && axiosError.response.status === 401) {
-                await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
-                const selection = await vscode.window.showErrorMessage(
-                    'Authentication failed: Invalid or expired Personal Access Token (PAT). Would you like to update your PAT?',
-                    'Update PAT'
-                );
-
-                if (selection === 'Update PAT') {
-                    // Trigger the update PAT command
-                    vscode.commands.executeCommand('azureDevopsPullRequest.updatePat');
-                }
-            } else if (axiosError.response && axiosError.response.status === 409) {
-
-                await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
-            }
-
-            else {
-                console.debug(error);
-                await vscode.window.showErrorMessage(`Error in ${callerFunction}: ${error.response?.data?.message || error.message}`);
-            }
-        } else {
-            await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
-        }
-        return [];
-    }
-
-    //#endregion
-
     public async monitorGitCommits(gitApi: any, configurationService: any) {
         gitApi.repositories.forEach(async (repo: any) => {
             const repoPath = repo.rootUri.fsPath;
             const remoteUrl = this.getRemoteUrl(repo);
 
+
+            // Ensure remoteUrl is not null and matches the configured Azure DevOps URL
+            if (!remoteUrl || !remoteUrl.startsWith(this.azureDevOpsOrgUrl)) {
+                log_debug(`Skipping repository '${repoPath}' as it's not in Azure DevOps (${remoteUrl})`);
+                return;
+            }
+
             if (remoteUrl) {
-                console.debug(`[DEBUG] Remote URL detected: ${remoteUrl}`);
+                log_debug(`Remote URL detected: ${remoteUrl}`);
                 const detectedProject = this.extractAzureDevOpsProject(remoteUrl);
 
                 if (detectedProject) {
-                    console.debug(`[DEBUG] Detected Azure DevOps project: ${detectedProject}`);
+                    log_debug(`Detected Azure DevOps project: ${detectedProject}`);
                     await configurationService.updateSelectedProjectInGlobalState(detectedProject);
                 }
             }
 
             repo.onDidCommit(async () => {
-                console.debug("[DEBUG] Commit detected!");
+                log_debug("Commit detected!");
 
                 const branchName = repo.state.HEAD?.name;
                 if (!branchName) {
-                    console.debug("[DEBUG] No active branch found.");
+                    log_debug("No active branch found.");
                     return;
                 }
 
-                console.debug(`[DEBUG] Commit detected in repo: ${repoPath}`);
+                log_debug(`Commit detected in repo: ${repoPath}`);
 
                 const isNewBranch = await this.isBranchNew(repo, branchName);
-                console.debug(`[DEBUG] Is new branch? ${isNewBranch}`);
+                log_debug(`Is new branch? ${isNewBranch}`);
 
                 if (isNewBranch) {
-                    console.debug(`Would you like to create a Pull Request for branch ${branchName}`);
+                    log_debug(`Would you like to create a Pull Request for branch ${branchName}`);
                     const choice = await vscode.window.showInformationMessage(
                         `Would you like to create a Pull Request for branch ${branchName} ?`,
                         'Yes',
@@ -1366,7 +1325,7 @@ export class PullRequestService {
                     );
 
                     if (choice === 'Yes') {
-                        console.debug("[DEBUG] User accepted PR creation.");
+                        log_debug("User accepted PR creation.");
 
                         // Fetch the selected Azure DevOps project
                         const selectedProject = configurationService.getSelectedProjectFromGlobalState();
@@ -1384,7 +1343,7 @@ export class PullRequestService {
                             return;
                         }
 
-                        console.debug(`[DEBUG] Matched Azure DevOps repo: ${matchingRepo.name}`);
+                        log_debug(`Matched Azure DevOps repo: ${matchingRepo.name}`);
 
                         // Call existing function for PR creation
                         const azureDevOpsTeamId = await this.getTeamIdFromName(selectedProject, configurationService.getConfiguration().azureDevOpsTeam);
@@ -1397,7 +1356,7 @@ export class PullRequestService {
             });
         });
 
-        console.debug("[DEBUG] Git commit monitoring initialized.");
+        log_debug("Git commit monitoring initialized.");
     }
 
 
@@ -1431,7 +1390,43 @@ export class PullRequestService {
     }
 
 
-}
+    //#region Error handling
 
+    private async handleError(error: unknown) {
+
+        const stackTrace = new Error().stack;
+        const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
+
+        if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError;
+            if (axiosError.response && axiosError.response.status === 401) {
+                await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
+                const selection = await vscode.window.showErrorMessage(
+                    'Authentication failed: Invalid or expired Personal Access Token (PAT). Would you like to update your PAT?',
+                    'Update PAT'
+                );
+
+                if (selection === 'Update PAT') {
+                    // Trigger the update PAT command
+                    vscode.commands.executeCommand('azureDevopsPullRequest.updatePat');
+                }
+            } else if (axiosError.response && axiosError.response.status === 409) {
+
+                await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
+            }
+
+            else {
+                await vscode.window.showErrorMessage(`Error in ${callerFunction}: ${error.response?.data?.message || error.message}`);
+            }
+        } else {
+            await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
+        }
+        return [];
+    }
+
+    //#endregion
+
+
+}
 
 
