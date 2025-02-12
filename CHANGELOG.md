@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/damhau/azdo-pull-request/compare/v1.2.0...v1.2.1) (2025-02-12)
+
+
+### Bug Fixes
+
+* add logging and debug ([09c2301](https://github.com/damhau/azdo-pull-request/commit/09c2301bb275de74b4f9ec71b12ce3997ae9143e))
+
 # [1.2.0](https://github.com/damhau/azdo-pull-request/compare/v1.1.3...v1.2.0) (2025-02-04)
 
 
