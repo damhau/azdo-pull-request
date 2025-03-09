@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import axiosRetry from 'axios-retry';
 import * as vscode from 'vscode';
+import { ErrorHandler } from './ErrorHandler';
 
 // Enable retry for axios requests
 axiosRetry(axios, { retries: 3 });
@@ -36,30 +37,43 @@ export class ProjectService {
     }
 
     // Error handler for Axios requests
+    // private async handleError(error: unknown) {
+    //     const stackTrace = new Error().stack;
+    //     const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
+
+    //     if (axios.isAxiosError(error)) {
+    //         const axiosError = error as AxiosError;
+    //         if (axiosError.response && axiosError.response.status === 401) {
+    //             await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
+    //             const selection = await vscode.window.showErrorMessage(
+    //                 'Authentication failed: Invalid or expired Personal Access Token (PAT). Would you like to update your PAT?',
+    //                 'Update PAT'
+    //             );
+
+    //             if (selection === 'Update PAT') {
+    //                 // Trigger the update PAT command
+    //                 vscode.commands.executeCommand('azureDevopsPullRequest.updatePat');
+    //             }
+
+
+    //         } else if (axiosError.response && axiosError.response.status === 409) {
+
+    //             await vscode.window.showErrorMessage(`${error.response?.data?.message || error.message}`);
+    //         } else if (error.message === "read ECONNRESET") {
+    //             await vscode.window.showErrorMessage('Connectivity problem with Azure Devops. Please check your internet connection.');
+
+
+    //         }
+
+    //         else {
+    //             await vscode.window.showErrorMessage(`Error ${callerFunction}: ${error.response?.data?.message || error.message}`);
+    //         }
+    //     } else {
+    //         await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
+    //     }
+    // }
     private async handleError(error: unknown) {
-        const stackTrace = new Error().stack;
-        const callerFunction = stackTrace ? stackTrace.split("\n")[2].trim() : "Unknown Caller";
-
-        if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError;
-            if (axiosError.response && axiosError.response.status === 401) {
-                await vscode.window.showErrorMessage('Authentication failed: Invalid or expired Personal Access Token (PAT). Please update your PAT.');
-                const selection = await vscode.window.showErrorMessage(
-                    'Authentication failed: Invalid or expired Personal Access Token (PAT). Would you like to update your PAT?',
-                    'Update PAT'
-                );
-
-                if (selection === 'Update PAT') {
-                    // Trigger the update PAT command
-                    vscode.commands.executeCommand('azureDevopsPullRequest.updatePat');
-                }
-
-
-            } else {
-                await vscode.window.showErrorMessage(`Error in ${callerFunction}: ${axiosError.message}`);
-            }
-        } else {
-            await vscode.window.showErrorMessage(`An unknown error occurred: ${error}`);
-        }
+        await ErrorHandler.handleError(error, 'PullRequestService');
+        return [];
     }
 }

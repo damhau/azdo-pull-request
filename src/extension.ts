@@ -5,10 +5,12 @@ import { SecretManager } from './SecretManager';
 import { ConfigurationService } from './ConfigurationService';
 import { ProjectProvider } from './ProjectProvider';
 import { ProjectService } from './ProjectService';
-
-
-
 import { extensions, Extension } from 'vscode';
+import { Logger, LogLevel } from './LoggingService';
+
+
+
+
 
 interface GitExtension {
 	getAPI(version: number): BuiltInGitApi;
@@ -20,6 +22,10 @@ interface BuiltInGitApi {
 
 
 export async function activate(context: vscode.ExtensionContext) {
+
+
+	const logger = Logger.getInstance(context);
+	logger.setLogLevel(LogLevel.INFO); // Set desired log level
 
 	const secretManager = new SecretManager(context);
 
@@ -36,8 +42,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const pat = await secretManager.getSecret('PAT');
 
-	console.debug(`Azure Devops Pull Request Started`);
-	console.debug(`Azure DevOps URL: ${azureDevOpsOrgUrl}`);
+	logger.info(`Azure Devops Pull Request Started`);
+	logger.info(`Azure DevOps URL: ${azureDevOpsOrgUrl}`);
 
 
 	const pullRequestService = new PullRequestService(azureDevOpsOrgUrl, userAgent, azureDevOpsApiVersion, pat!);
@@ -160,7 +166,9 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 
-export function deactivate() { }
+export function deactivate() {
+	Logger.getInstance({} as vscode.ExtensionContext).dispose();
+}
 
 async function getBuiltInGitApi(): Promise<BuiltInGitApi | undefined> {
 	try {

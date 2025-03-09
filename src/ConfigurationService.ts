@@ -79,7 +79,7 @@ export class ConfigurationService {
         });
 
 
-        if (inputUrl  && inputPat) {
+        if (inputUrl && inputPat) {
             await vscode.workspace.getConfiguration('azureDevopsPullRequest').update('azureDevOpsOrgUrl', inputUrl, vscode.ConfigurationTarget.Global);
             await this.secretManager!.storeSecret('PAT', inputPat);
             await this.clearSelectedProjectState();

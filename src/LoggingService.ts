@@ -1,38 +1,73 @@
 import * as vscode from 'vscode';
 
+export enum LogLevel {
+    DEBUG = "DEBUG",
+    INFO = "INFO",
+    WARN = "WARN",
+    ERROR = "ERROR"
+}
+
 export class Logger {
-    private static isDebugEnabled(): boolean {
-        const config = vscode.workspace.getConfiguration('azureDevopsPullRequest');
-        return config.get<boolean>('enableDebugLogs', false);
+    private static instance: Logger;
+    private outputChannel: vscode.OutputChannel;
+    private currentLogLevel: LogLevel;
+
+    private constructor(extensionName: string) {
+        this.outputChannel = vscode.window.createOutputChannel(`${extensionName} Logs`);
+        this.currentLogLevel = LogLevel.DEBUG; // Default log level
     }
 
-    /**
-     * Logs debug messages (only if enabled in settings)
-     */
-    static debug(message: string, ...optionalParams: any[]) {
-        if (Logger.isDebugEnabled()) {
-            console.debug(`[DEBUG] ${message}`, ...optionalParams);
+    public static getInstance(context: vscode.ExtensionContext): Logger {
+        if (!Logger.instance) {
+            const extensionName = "Azure Devops Review Pull Request";
+            Logger.instance = new Logger(extensionName);
+        }
+        return Logger.instance;
+    }
+
+    public setLogLevel(level: LogLevel) {
+        this.currentLogLevel = level;
+    }
+
+    public log(message: string, level: LogLevel = LogLevel.INFO) {
+        if (this.shouldLog(level)) {
+            const timestamp = new Date().toISOString();
+            this.outputChannel.appendLine(`[${timestamp}] ${message}`);
         }
     }
 
-    /**
-     * Logs general info messages (always displayed)
-     */
-    static info(message: string, ...optionalParams: any[]) {
-        console.info(`[INFO] ${message}`, ...optionalParams);
+    public debug(message: string) {
+        this.log(`🔵 ${message}`, LogLevel.DEBUG);
     }
 
-    /**
-     * Logs warning messages
-     */
-    static warn(message: string, ...optionalParams: any[]) {
-        console.warn(`[WARN] ${message}`, ...optionalParams);
+    public info(message: string) {
+        this.log(`ℹ️ ${message}`, LogLevel.INFO);
     }
 
-    /**
-     * Logs error messages
-     */
-    static error(message: string, ...optionalParams: any[]) {
-        console.error(`[ERROR] ${message}`, ...optionalParams);
+    public warn(message: string) {
+        this.log(`⚠️ ${message}`, LogLevel.WARN);
+    }
+
+    public error(message: string) {
+        this.log(`❌ ${message}`, LogLevel.ERROR);
+    }
+
+    public show() {
+        this.outputChannel.show();
+    }
+
+    public dispose() {
+        this.outputChannel.dispose();
+    }
+
+    private shouldLog(level: LogLevel): boolean {
+        const levelOrder = {
+            [LogLevel.DEBUG]: 0,
+            [LogLevel.INFO]: 1,
+            [LogLevel.WARN]: 2,
+            [LogLevel.ERROR]: 3
+        };
+
+        return levelOrder[level] >= levelOrder[this.currentLogLevel];
     }
 }
