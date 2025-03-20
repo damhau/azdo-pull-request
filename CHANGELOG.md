@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/damhau/azdo-pull-request/compare/v1.2.1...v1.3.0) (2025-03-09)
+
+
+### Features
+
+* add logging and refector error handling ([2435e84](https://github.com/damhau/azdo-pull-request/commit/2435e84b386f75b667060bf1b50246a761c2816a))
+
 ## [1.2.1](https://github.com/damhau/azdo-pull-request/compare/v1.2.0...v1.2.1) (2025-02-12)
 
 
