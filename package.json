@@ -14,9 +14,6 @@
     "Other"
   ],
   "publisher": "DHC",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
