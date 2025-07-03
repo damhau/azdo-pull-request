@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/damhau/azdo-pull-request/compare/v1.3.1...v1.3.2) (2025-07-03)
+
+
+### Bug Fixes
+
+* change icon ([375eb7c](https://github.com/damhau/azdo-pull-request/commit/375eb7ce98d4de61277689f50e28bdbe877599e6))
+
 ## [1.3.1](https://github.com/damhau/azdo-pull-request/compare/v1.3.0...v1.3.1) (2025-03-20)
 
 
