@@ -15,6 +15,9 @@
   ],
   "publisher": "DHC",
   "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
