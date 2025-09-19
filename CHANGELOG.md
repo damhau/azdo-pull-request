@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/damhau/azdo-pull-request/compare/v1.3.4...v1.4.0) (2025-09-19)
+
+
+### Bug Fixes
+
+* add back automatic startup ([5e5b595](https://github.com/damhau/azdo-pull-request/commit/5e5b59558f063e976d6e6edaa7c5145542553512))
+
+
+### Features
+
+* change extension name ([ed695d3](https://github.com/damhau/azdo-pull-request/commit/ed695d3bbae2d210e19993526126fe48a93bd035))
+
 ## [1.3.4](https://github.com/damhau/azdo-pull-request/compare/v1.3.3...v1.3.4) (2025-07-03)
 
 
