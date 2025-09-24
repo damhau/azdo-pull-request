@@ -3,6 +3,15 @@
 
 ### Bug Fixes
 
+* bundled version ([3328e36](https://github.com/damhau/azdo-pull-request/commit/3328e36bd2f05b67a540fbae4940b34ab96b25c6))
+* bundled version ([92d3976](https://github.com/damhau/azdo-pull-request/commit/92d397620351fbf61f6624e58f752e0674c9a67f))
+* bundled vesrion 2 ([09b3f3b](https://github.com/damhau/azdo-pull-request/commit/09b3f3b70b66024e17ef261a2a69bb871db00e9c))
+
+## [1.4.4](https://github.com/damhau/azdo-pull-request/compare/v1.4.3...v1.4.4) (2025-09-24)
+
+
+### Bug Fixes
+
 * bundled version ([92d3976](https://github.com/damhau/azdo-pull-request/commit/92d397620351fbf61f6624e58f752e0674c9a67f))
 
 ## [1.4.3](https://github.com/damhau/azdo-pull-request/compare/v1.4.2...v1.4.3) (2025-09-24)
