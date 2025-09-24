@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/damhau/azdo-pull-request/compare/v1.4.1...v1.4.2) (2025-09-24)
+
+
+### Bug Fixes
+
+* temp name ([0955e80](https://github.com/damhau/azdo-pull-request/commit/0955e80511da9599ce600ccf066280f23a42d5db))
+
 ## [1.4.1](https://github.com/damhau/azdo-pull-request/compare/v1.4.0...v1.4.1) (2025-09-24)
 
 
