@@ -218,7 +218,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "build": "node scripts/build.mjs",
+    "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
@@ -226,6 +227,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "esbuild": "^0.23.0",
     "@types/mocha": "^10.0.7",
     "@types/node": "20.x",
     "@types/vscode": "^1.93.0",
