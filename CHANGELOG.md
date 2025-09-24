@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/damhau/azdo-pull-request/compare/v1.4.0...v1.4.1) (2025-09-24)
+
+
+### Bug Fixes
+
+* name ([9c281bb](https://github.com/damhau/azdo-pull-request/commit/9c281bbfdcdebe08de83a684e50b9eb6089abcf7))
+
 # [1.4.0](https://github.com/damhau/azdo-pull-request/compare/v1.3.4...v1.4.0) (2025-09-19)
 
 
