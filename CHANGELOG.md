@@ -1,3 +1,10 @@
+## [1.4.5](https://github.com/damhau/azdo-pull-request/compare/v1.4.4...v1.4.5) (2025-09-24)
+
+
+### Bug Fixes
+
+* test bundled vesrion ([376099a](https://github.com/damhau/azdo-pull-request/commit/376099a98b18ff3a4e0c769e60a7a0414d894d32))
+
 ## [1.4.4](https://github.com/damhau/azdo-pull-request/compare/v1.4.3...v1.4.4) (2025-09-24)
 
 
