@@ -1,5 +1,5 @@
 {
-  "name": "pull-request-manager-azure-devops",
+  "name": "azure-devops-review-pull-request",
   "displayName": "Pull Request Manager for Azure Devops",
   "description": "The Pull Request Manager for Azure Devops extension for Visual Studio Code enables users to manage their pull requests",
   "version": "0.3.5",
