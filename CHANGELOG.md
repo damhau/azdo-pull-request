@@ -1,3 +1,10 @@
+## [1.4.6](https://github.com/damhau/azdo-pull-request/compare/v1.4.5...v1.4.6) (2025-09-24)
+
+
+### Bug Fixes
+
+* try new bundle ([e738f57](https://github.com/damhau/azdo-pull-request/commit/e738f573013320a16849e47b785e13f0b293a504))
+
 ## [1.4.5](https://github.com/damhau/azdo-pull-request/compare/v1.4.4...v1.4.5) (2025-09-24)
 
 
