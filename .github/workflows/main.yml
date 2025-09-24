@@ -50,13 +50,6 @@ jobs:
       - run: npm install --save-dev semantic-release semantic-release-vsce @semantic-release/changelog @semantic-release/git
       - name: Install deps
         run: npm ci
-
-      - run: npx semantic-release
-        env:
-          # GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # In case you want to publish to Visual Studio Marketplace
-          VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
       - run: npx semantic-release
         env:
           # GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
