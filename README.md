@@ -12,6 +12,7 @@ The Azure DevOps Pull Request Review extension for Visual Studio Code enables us
 - **Approve Pull Request:** Approve pull requests directly from the VS Code interface.
 - **Reject Pull Request:** Reject pull requests with a single command.
 - **Create New Pull Request:** Create new pull requests by selecting the repository and source branch.
+- **Create Pull Request for Current Branch:** Trigger pull request creation for the active Git branch with a single command.
 - **Abandon Pull Request:** Mark pull requests as abandoned.
 - **Open Pull Request in Browser:** Quickly navigate to the pull request in your default browser.
 - **Add Comment to Pull Request:** Add comments to pull requests using a custom webview.
@@ -58,6 +59,12 @@ The extension will store your PAT securely using VS Code's Secret Storage.
 1. Click on the add button in the Azure DevOps Pull Request view.
 2. Follow the prompts to select the repository, source branch, and provide a title and description.
 
+### Create Pull Request for the Current Branch
+
+1. Open the Command Palette (Ctrl+Shift+P or Cmd+Shift+P).
+2. Run `AzDo PR Review: Create Pull Request for Current Branch`.
+3. Confirm the repository and follow the prompts to provide the pull request details.
+
 ### Add Comment to Pull Request
 
 1. Select a pull request and click on the comment icon.
@@ -83,6 +90,7 @@ The extension provides the following commands:
 - `azureDevopsPullRequest.approvePullRequest`: Approve a selected pull request.
 - `azureDevopsPullRequest.rejectPullRequest`: Reject a selected pull request.
 - `azureDevopsPullRequest.createPullRequest`: Open the form to create a new pull request.
+- `azureDevopsPullRequest.createPullRequestForCurrentBranch`: Create a pull request for the active Git branch.
 - `azureDevopsPullRequest.refreshPullRequests`: Refresh the list of pull requests.
 - `azureDevopsPullRequest.abandonPullRequest`: Mark a selected pull request as abandoned.
 - `azureDevopsPullRequest.openPullRequestInBrowser`: Open a selected pull request in the default web browser.

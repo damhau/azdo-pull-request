@@ -74,17 +74,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	const gitApi = await getBuiltInGitApi();
 
 	if (!gitApi) {
-		vscode.window.showErrorMessage("Git API is unavailable.");
-		return;
-	}
+		vscode.window.showErrorMessage("Git API is unavailable. Git-based features will be disabled.");
+	} else {
+		if (!gitApi.repositories.length) {
+			vscode.window.showErrorMessage("No Git repository found in this workspace. Git-based features will be disabled until a repository is detected.");
+		}
 
-	if (gitApi.repositories.length === 0) {
-		vscode.window.showErrorMessage("No Git repository found in this workspace.");
-		return;
+		// Start monitoring Git commits when repositories are available
+		pullRequestService.monitorGitCommits(gitApi, configurationService);
 	}
-
-	// Start monitoring Git commits
-	pullRequestService.monitorGitCommits(gitApi, configurationService);
 
 
 	context.subscriptions.push(
@@ -113,6 +111,18 @@ export async function activate(context: vscode.ExtensionContext) {
 			await pullRequestService.openCreatePullRequestForm(configurationService.getSelectedProjectFromGlobalState()!, azureDevOpsTeamId!);
 			pullRequestProvider.refresh(); // Refresh only if the pull request was successfully created
 
+		}),
+		vscode.commands.registerCommand('azureDevopsPullRequest.createPullRequestForCurrentBranch', async () => {
+			const gitApiForCommand = await getBuiltInGitApi();
+			if (!gitApiForCommand) {
+				vscode.window.showErrorMessage('Git API is unavailable.');
+				return;
+			}
+
+			const created = await pullRequestService.createPullRequestForCurrentBranch(gitApiForCommand, configurationService);
+			if (created) {
+				pullRequestProvider.refresh();
+			}
 		}),
 		vscode.commands.registerCommand('azureDevopsPullRequest.openFileContent', (fileName: string, fileUrl: string, originalObjectId: string, repoName: string, changeType: string) => {
 			if (changeType === 'edit') {

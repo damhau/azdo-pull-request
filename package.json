@@ -16,7 +16,8 @@
   "publisher": "DHC",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:azureDevopsPullRequest.createPullRequestForCurrentBranch"
   ],
   "contributes": {
     "viewsContainers": {
@@ -89,6 +90,11 @@
         "command": "azureDevopsPullRequest.addCommentToPullRequest",
         "title": "Add Comment to Pull Request",
         "icon": "$(comment)"
+      },
+      {
+        "command": "azureDevopsPullRequest.createPullRequestForCurrentBranch",
+        "title": "AzDo PR Review: Create Pull Request for Current Branch",
+        "icon": "$(git-pull-request)"
       },
       {
         "command": "azureDevopsPullRequest.configure",

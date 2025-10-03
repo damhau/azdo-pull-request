@@ -1280,6 +1280,81 @@ export class PullRequestService {
     }
     //#endregion
 
+    public async createPullRequestForCurrentBranch(gitApi: any, configurationService: any): Promise<boolean> {
+        const activeConfiguration = configurationService.getConfiguration();
+        const selectedProject = configurationService.getSelectedProjectFromGlobalState();
+
+        if (!selectedProject) {
+            vscode.window.showErrorMessage('No Azure DevOps project selected. Configure the extension before creating a pull request.');
+            return false;
+        }
+
+        if (!gitApi || !Array.isArray(gitApi.repositories) || gitApi.repositories.length === 0) {
+            vscode.window.showErrorMessage('No Git repository detected in the current workspace.');
+            return false;
+        }
+
+        let targetRepository = gitApi.repositories[0];
+
+        if (gitApi.repositories.length > 1) {
+            const repoItems: Array<vscode.QuickPickItem & { repository: any }> = gitApi.repositories.map((repository: any) => ({
+                label: repository.rootUri?.fsPath ?? 'Unknown repository',
+                description: repository.state.HEAD?.name ? `Current branch: ${repository.state.HEAD.name}` : 'No active branch',
+                repository
+            }));
+            const repoPick = await vscode.window.showQuickPick<vscode.QuickPickItem & { repository: any }>(repoItems, { placeHolder: 'Select the repository for the pull request' });
+
+            if (!repoPick) {
+                return false;
+            }
+
+            targetRepository = repoPick.repository;
+        }
+
+        const branchName = targetRepository.state.HEAD?.name;
+
+        if (!branchName) {
+            vscode.window.showErrorMessage('No active branch detected for the selected repository.');
+            return false;
+        }
+
+        const remote = targetRepository.state.remotes?.find((r: any) => r.fetchUrl) ?? null;
+        const remoteUrl = remote?.fetchUrl ?? remote?.pushUrl;
+
+        if (!remoteUrl || !remoteUrl.startsWith(this.azureDevOpsOrgUrl)) {
+            vscode.window.showErrorMessage('The repository remote does not match the configured Azure DevOps organization.');
+            return false;
+        }
+
+        const repositories = await this.getRepositories(selectedProject);
+        if (!Array.isArray(repositories) || repositories.length === 0) {
+            vscode.window.showErrorMessage(`No repositories found in Azure DevOps project '${selectedProject}'.`);
+            return false;
+        }
+
+        let matchingRepository = repositories.find((repo: any) => remoteUrl.toLowerCase().includes(repo.name.toLowerCase()));
+
+        if (!matchingRepository) {
+            const azureRepoItems: Array<vscode.QuickPickItem & { repository: any }> = repositories.map((repo: any) => ({
+                label: repo.name,
+                repository: repo
+            }));
+            const repoPick = await vscode.window.showQuickPick<vscode.QuickPickItem & { repository: any }>(azureRepoItems, { placeHolder: 'Select the Azure DevOps repository for the pull request' });
+
+            if (!repoPick) {
+                return false;
+            }
+
+            matchingRepository = repoPick.repository;
+        }
+
+        const azureDevOpsTeamId = activeConfiguration.azureDevOpsTeam
+            ? await this.getTeamIdFromName(selectedProject, activeConfiguration.azureDevOpsTeam)
+            : null;
+
+        return await this.openCreatePullRequestForm(selectedProject, azureDevOpsTeamId!, matchingRepository.id, branchName);
+    }
+
     public async monitorGitCommits(gitApi: any, configurationService: any) {
         gitApi.repositories.forEach(async (repo: any) => {
             const repoPath = repo.rootUri.fsPath;
