@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/damhau/azdo-pull-request/compare/v1.4.6...v1.5.0) (2025-10-03)
+
+
+### Features
+
+* add command to create PR from current branch ([0aa8ba6](https://github.com/damhau/azdo-pull-request/commit/0aa8ba6de20d0cc2794571b5b9f9de66e7dc4097))
+
 ## [1.4.6](https://github.com/damhau/azdo-pull-request/compare/v1.4.5...v1.4.6) (2025-09-24)
 
 
